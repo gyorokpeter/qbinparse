@@ -2,7 +2,6 @@
 #include "k.h"
 #include <stdint.h>
 #include <string.h>
-#include <iostream>
 
 extern "C" {
 
@@ -19,11 +18,9 @@ S ssym(const char *s) {
 }
 
 K kdup(K k) {
-    std::cout << "kdup " << (void*)k << " r=" << k->r << std::endl;
     if (k->r == 0) return k;
     if (k->t != 11) return kerror("kdup: NYI type");
     K result = ktn(k->t, k->n);
-    std::cout << "kdup result=" << (void*)result << " r=" << result->r << std::endl;
     memcpy(kS(result), kS(k), sizeof(char*)*k->n);
     r0(k);
     return result;
@@ -174,9 +171,7 @@ K k_binparse_parse(K schema, K input, K mainType) {
         if (kS(kK(schema)[0])[i] == mainType->s) {
             K result = parseRecord(schema, ptr, i);
             if (ptr < end) {
-                std::cout << "parse: " << (void*)kK(result)[0] << std::endl;
                 kK(result)[0] = kdup(kK(result)[0]);
-                std::cout << "parse: " << (void*)kK(result)[0] << std::endl;
                 S fillerKey = ssym("xxxRemainingData");
                 K fillerValue = ktn(4, end-ptr);
                 memcpy(kG(fillerValue), ptr, end-ptr);
