@@ -35,7 +35,9 @@
                 tb:`byte$type value "`",ename,"$()";
               ename like "record";
                 [
-                    tb:`byte$(out[`recName]?`$tokens[ptr])+20;
+                    rn:`$tokens[ptr];
+                    if[not rn in out[`recName]; '"rec used before defined: ",string rn];
+                    tb:`byte$(out[`recName]?rn)+20;
                     ptr+:1 //process record name
                 ];
             {'"unknown type in array"}[]];

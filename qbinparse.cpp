@@ -105,6 +105,7 @@ inline K parseArray(K schema, char *&ptr, char *&recschema, K partialResult, int
         break;
     }
     recschema += 4;
+    if(size >= 4294948675) return ksym("tooLargeArray");
     if (elementType > -20) {
         K result = ktn(-elementType,size);
         size *= getTypeSize(elementType);
@@ -122,6 +123,9 @@ inline K parseArray(K schema, char *&ptr, char *&recschema, K partialResult, int
 }
 
 K parseRecord(K schema, char *&ptr, size_t schemaindex) {
+    if (schemaindex >= kK(schema)[1]->n) {
+        return ksym("invalidSchemaId");
+    }
     K fieldLabels = kK(kK(schema)[1])[schemaindex];
     size_t fieldCount = fieldLabels->n;
     char *recschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
