@@ -81,13 +81,30 @@ inline int getTypeSize(int typeNum) {
     return 0;
 }
 
-K parseRecord(K schema, char *&ptr, size_t schemaindex);
+K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex);
 
-inline K parseArray(K schema, char *&ptr, char *&recschema, K partialResult, int elementType) {
+inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult, int elementType) {
+    if (ptr >= end) return ksym("endOfBuffer");
     char sizeMode = *recschema;
     uint32_t size = 0;
+    uint32_t guard = 0;
+    bool fixedSize = true;
     ++recschema;
     switch(sizeMode) {
+    case 1:{
+        char *eptr = ptr;
+        while (eptr < end && *eptr != 0) ++eptr;
+        ++eptr;
+        if (eptr > end) size = 2100000000;
+        size = eptr-ptr;
+        break;
+    };
+    case 2:
+    case 3:
+    case 4:
+        fixedSize = false;
+        guard = *(uint32_t*)recschema;
+        break;
     case 0:
         size = *(uint32_t*)recschema;
         break;
@@ -105,24 +122,89 @@ inline K parseArray(K schema, char *&ptr, char *&recschema, K partialResult, int
         break;
     }
     recschema += 4;
-    if(size >= 4294948675) return ksym("tooLargeArray");
-    if (elementType > -20) {
-        K result = ktn(-elementType,size);
-        size *= getTypeSize(elementType);
-        memcpy(kG(result), ptr, size);
-        ptr += size;
-        return result;
-    } else if (elementType <= -20) {
-        K result = ktn(0,size);
-        for (size_t i=0;i<size; ++i) {
-            kK(result)[i] = parseRecord(schema, ptr, (-elementType)-20);
+    if(fixedSize) {
+        if(size >= 2100000000) {
+            ptr = end;
+            return ksym("tooLargeArray");
         }
-        return result;
+        if (elementType > -20) {
+            K result = ktn(-elementType,size);
+            uint64_t fullsize = uint64_t(size)*getTypeSize(elementType);
+            if(fullsize > 4200000000) {
+                ptr = end;
+                return ksym("tooLargeArray");
+            }
+            if(ptr+fullsize > end) return ksym("arrayRunsPastInput");
+            memcpy(kG(result), ptr, fullsize);
+            ptr += fullsize;
+            return result;
+        } else if (elementType <= -20) {
+            uint64_t fullsize = uint64_t(size)*sizeof(void*);
+            if(fullsize > 4200000000) {
+                ptr = end;
+                return ksym("tooLargeArray");
+            }
+            if(ptr+fullsize > end) {
+                ptr = end;
+                return ksym("arrayRunsPastInput");
+            }
+            K result = ktn(0,size);
+            for (size_t i=0;i<size; ++i) {
+                kK(result)[i] = parseRecord(schema, ptr, end, (-elementType)-20);
+            }
+            return result;
+        }
+    } else {    //not fixedSize
+        if(elementType > -20) {
+            K result = ktn(-elementType,0);
+            int elementSize = getTypeSize(elementType);
+            while(ptr < end) {
+                bool cond = false;
+                switch(sizeMode) {
+                    case 2:
+                        cond = *(uint8_t *)ptr == guard;
+                        break;
+                    case 3:
+                        cond = *(uint16_t *)ptr == guard;
+                        break;
+                    case 4:
+                        cond = *(uint32_t *)ptr == guard;
+                        break;
+                }
+                if (cond) break;
+                uint64_t atom;
+                memcpy(&atom, ptr, elementSize);
+                ptr += elementSize;
+                ja(&result, &atom);
+            }
+            return result;
+        } else {
+            K result = ktn(0,0);
+            while(ptr < end) {
+                bool cond = false;
+                switch(sizeMode) {
+                    case 2:
+                        cond = *(uint8_t *)ptr == guard;
+                        break;
+                    case 3:
+                        cond = *(uint16_t *)ptr == guard;
+                        break;
+                    case 4:
+                        cond = *(uint32_t *)ptr == guard;
+                        break;
+                }
+                if (cond) break;
+                K rec = parseRecord(schema, ptr, end, (-elementType)-20);
+                jk(&result, rec);
+            }
+            return result;
+        }
     }
     return ki(ni);
 }
 
-K parseRecord(K schema, char *&ptr, size_t schemaindex) {
+K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
+    if (ptr >= end) return ksym("endOfBuffer");
     if (schemaindex >= kK(schema)[1]->n) {
         return ksym("invalidSchemaId");
     }
@@ -134,9 +216,9 @@ K parseRecord(K schema, char *&ptr, size_t schemaindex) {
         char inst = *recschema;
         ++recschema;
         if (inst <= -20) {
-            kK(result)[i] = parseRecord(schema, ptr, (-inst)-20);
+            kK(result)[i] = parseRecord(schema, ptr, end, (-inst)-20);
         } else if (inst > 0) {
-            kK(result)[i] = parseArray(schema, ptr, recschema, result, -inst);
+            kK(result)[i] = parseArray(schema, ptr, end, recschema, result, -inst);
         } else switch(inst) {
         case -4:
             kK(result)[i] = parseByte(ptr);
@@ -167,13 +249,14 @@ K parseRecord(K schema, char *&ptr, size_t schemaindex) {
 }
 
 K k_binparse_parse(K schema, K input, K mainType) {
+    if (schema->t != 0) { return kerror("parse: schema must be general list"); }
     if (input->t != 4) { return kerror("parse: data must be bytelist"); }
     if (mainType->t != -11) { return kerror("parse: main type must be a symbol"); }
     char *ptr = (char*)kG(input);
     char *end = ptr+input->n;
     for (size_t i=0; i<kK(schema)[0]->n; ++i) {
         if (kS(kK(schema)[0])[i] == mainType->s) {
-            K result = parseRecord(schema, ptr, i);
+            K result = parseRecord(schema, ptr, end, i);
             if (ptr < end) {
                 kK(result)[0] = kdup(kK(result)[0]);
                 S fillerKey = ssym("xxxRemainingData");
@@ -197,7 +280,7 @@ K k_binparse_parseRepeat(K schema, K input, K mainType) {
         if (kS(kK(schema)[0])[i] == mainType->s) {
             K result = ktn(0,0);
             while (ptr < end)
-                jk(&result, parseRecord(schema, ptr, i));
+                jk(&result, parseRecord(schema, ptr, end, i));
             return result;
         }
     }

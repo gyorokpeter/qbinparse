@@ -30,7 +30,13 @@ The possible types are:
 * record _recordName_: a nested record
 * array _elementType_ _size_: an array
   * elementType can be the atomic types or record, currently multi-dimensional array is not supported
-  * size is specified either as *x* _number_ or *xv* _fieldName_.
+  * size can be specified as:
+    * *x* _number_: constant length
+    * *xv* _fieldName_: length is the value of the specified field
+    * *xz*: zero-terminated string
+    * *tpb* _number_: array has a guard byte with the value _number_ after it
+    * *tps* _number_: array has a guard short with the value _number_ after it
+    * *tpi* _number_: array has a guard int with the value _number_ after it
 
 ## Parsing
 First compile the schema:
@@ -67,4 +73,4 @@ schema:.binp.compileSchema schemaStr;
 ```
 Returns: `length`str!(6h;"Hello")
 
-
+See also examples.q.

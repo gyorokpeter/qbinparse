@@ -7,54 +7,85 @@
 
 .binp.unLE:{$[-4h=type x;enlist x;reverse 0x00 vs x]};
 
-.binp.compileSchemaP1P1:{[vars]
-    tokens:vars`tokens;
-    ptr:vars`ptr;
-    out:vars`out;
-    nFieldNames:vars`nFieldNames;
-    nFieldSchema:vars`nFieldSchema;
-    nFieldTypes:vars`nFieldTypes;
-    ptr+:1; //process "field"
-    fname:`$tokens[ptr];
-    ptr+:1; //process field name
-    nFieldNames,:fname;
-    tname:tokens[ptr];
-    ptr+:1; //process type name
-    $[tname in ("char";"byte";"short";"int";"long";"real";"float");
-        [nFieldSchema,:tb:`byte$neg type value "`",tname,"$()"; nFieldTypes,:tb];
-      tname like "record";
-        [nFieldSchema,:tb:`byte$neg(out[`recName]?`$tokens[ptr])+20;
-            ptr+:1; //process record name
-            nFieldTypes,:tb
-        ];
-      tname like "array";
+.binp.compileSchemaP1P1atom:{[vars;tname]
+    tb:`byte$neg type value "`",tname,"$()";
+    vars[`nFieldSchema],:tb;
+    vars[`nFieldTypes],:tb;
+    vars};
+
+.binp.compileSchemaP1P1record:{[vars;tname]
+    tb:`byte$neg(vars[`out][`recName]?`$vars[`tokens][vars[`ptr]])+20;
+    vars[`nFieldSchema],:tb;
+    vars[`ptr]+:1; //process record name
+    vars[`nFieldTypes],:tb;
+    vars};
+
+.binp.compileSchemaP1P1array:{[vars;tname]
+    ename:vars[`tokens][vars[`ptr]];
+    vars[`ptr]+:1; //process element type name
+    $[ename in ("char";"byte";"short";"int";"long";"real";"float");
+        tb:`byte$type value "`",ename,"$()";
+      ename like "record";
         [
-            ename:tokens[ptr];
-            ptr+:1; //process element type name
-            $[ename in ("char";"byte";"short";"int";"long";"real";"float");
-                tb:`byte$type value "`",ename,"$()";
-              ename like "record";
-                [
-                    rn:`$tokens[ptr];
-                    if[not rn in out[`recName]; '"rec used before defined: ",string rn];
-                    tb:`byte$(out[`recName]?rn)+20;
-                    ptr+:1 //process record name
-                ];
-            {'"unknown type in array"}[]];
-            nFieldSchema,:tb;
-            nFieldTypes,:tb;
-            szt:tokens[ptr];
-            szv:tokens[ptr+1];
-            ptr+:2; //process "x/xv" and length
-            len:$[szt like enlist"x";
-                [nFieldSchema,:0x00;n:"J"$szv;if[null n;{'"invalid size"}[]];n];
-              szt like "xv";
-                [n:nFieldNames?`$szv;nFieldSchema,:nFieldTypes[n];n];
-              {'"unknown length specifier"}[]];
-            nFieldSchema,:.binp.unLE `int$len;
+            rn:`$vars[`tokens][vars[`ptr]];
+            if[not rn in vars[`out][`recName]; '"rec used before defined: ",string rn];
+            tb:`byte$(vars[`out][`recName]?rn)+20;
+            vars[`ptr]+:1 //process record name
         ];
-    {'"unknown type in field"}[]];
-    `tokens`ptr`out`nFieldNames`nFieldSchema`nFieldTypes!(tokens;ptr;out;nFieldNames;nFieldSchema;nFieldTypes)};
+    {'"unknown type in array"}[]];
+    vars[`nFieldSchema],:tb;
+    vars[`nFieldTypes],:tb;
+    szt:vars[`tokens][vars[`ptr]];
+    szv:vars[`tokens][vars[`ptr]+1];
+    vars[`ptr]+:1; //process "x/xv"
+    len:$[szt~enlist"x";
+        [vars[`nFieldSchema],:0x00;
+            n:"J"$szv;
+            if[null n;{'"invalid size"}[]];
+            vars[`ptr]+:1; //process length
+            n];
+      szt~"xv";
+        [n:vars[`nFieldNames]?`$szv;
+            if[n=count vars[`nFieldNames];{'"uknown field in length"}[]];
+            vars[`nFieldSchema],:vars[`nFieldTypes][n];
+            vars[`ptr]+:1; //process length
+            n];
+      szt~"xz";
+        [vars[`nFieldSchema],:0x01;0];
+      szt~"tpb";
+        [vars[`nFieldSchema],:0x02;
+            guard:"I"$vars[`tokens][vars[`ptr]];
+            vars[`ptr]+:1;  //process guard
+            guard];
+      szt~"tps";
+        [vars[`nFieldSchema],:0x03;
+            guard:"I"$vars[`tokens][vars[`ptr]];
+            vars[`ptr]+:1;  //process guard
+            guard];
+      szt~"tpi";
+        [vars[`nFieldSchema],:0x04;
+            guard:"I"$vars[`tokens][vars[`ptr]];
+            vars[`ptr]+:1;  //process guard
+            guard];
+      {'"unknown length specifier: ",x}[szt]];
+    vars[`nFieldSchema],:.binp.unLE `int$len;
+    vars};
+
+.binp.compileSchemaP1P1:{[vars]
+    vars[`ptr]+:1; //process "field"
+    fname:`$vars[`tokens][vars[`ptr]];
+    vars[`ptr]+:1; //process field name
+    vars[`nFieldNames],:fname;
+    tname:vars[`tokens][vars[`ptr]];
+    vars[`ptr]+:1; //process type name
+    $[tname in ("char";"byte";"short";"int";"long";"real";"float");
+        vars:.binp.compileSchemaP1P1atom[vars;tname];
+      tname~"record";
+        vars:.binp.compileSchemaP1P1record[vars;tname];
+      tname~"array";
+        vars:.binp.compileSchemaP1P1array[vars;tname];
+    {'"unknown type in field: ",x}[tname]];
+    vars};
 
 .binp.compileSchemaP1:{[vars]
     tokens:vars`tokens;
