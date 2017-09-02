@@ -7,6 +7,8 @@
 
 .binp.unLE:{$[-4h=type x;enlist x;reverse 0x00 vs x]};
 
+.binp.tokenize:{{x where not(1<count each x)&x[;0]in" /\t\n"} -4!x};
+
 .binp.compileSchemaP1P1atom:{[vars;tname]
     tb:`byte$neg type value "`",tname,"$()";
     vars[`nFieldSchema],:tb;
@@ -14,10 +16,58 @@
     vars};
 
 .binp.compileSchemaP1P1record:{[vars;tname]
-    tb:`byte$neg(vars[`out][`recName]?`$vars[`tokens][vars[`ptr]])+20;
+    recName:`$vars[`tokens][vars[`ptr]];
+    if[not recName in vars[`out][`recName]; '"unknown record: ",string recName];
+    recIndex:vars[`out][`recName]?recName;
+    tb:`byte$neg recIndex+20;
     vars[`nFieldSchema],:tb;
     vars[`ptr]+:1; //process record name
     vars[`nFieldTypes],:tb;
+    vars};
+
+.binp.compileSchemaP1P1case:{[vars;tname]
+    caseVar:`$vars[`tokens][vars[`ptr]];
+    vars[`ptr]+:1;    //process case variable
+    if[not caseVar in -1_vars[`nFieldNames]; '"invalid field in case: ",string caseVar];
+    caseVarIndex:vars[`nFieldNames]?caseVar;
+    caseVarType:vars[`nFieldTypes][caseVarIndex];
+    if[not caseVarType in `byte$-4 -5 -6 -7; '"case variable not byte/short/int/long: ",string caseVar];
+    caseSchema:`byte$();
+    caseCount:0;
+    fieldExtType:0x01;
+    defaultCase:0;
+    while[[
+        if[vars[`ptr]>=count vars[`tokens]; '"case \"end\" not found before end of input"];
+        not "end"~vars[`tokens][vars[`ptr]]];
+        caseLabel:vars[`tokens][vars[`ptr]];
+        vars[`ptr]+:1;    //process case label
+        caseRec:`$vars[`tokens][vars[`ptr]];
+        vars[`ptr]+:1;    //process case record
+        if[not caseRec in vars[`out][`recName]; '"invalid record in case: ",string caseRec];
+        caseRecN:`byte$vars[`out][`recName]?caseRec;
+        $[caseLabel~"default";
+            [
+                if[fieldExtType=0x02; '"more than one default case"];
+                fieldExtType:0x02;
+                defaultCase:caseRecN;
+            ];[
+                caseLabelN:"I"$caseLabel;
+                if[null caseLabelN; '"invalid case number: ",caseLabel];
+                caseSchema,:.binp.unLE[caseLabelN],caseRecN;
+                caseCount+:1;
+            ]
+        ];
+    ];
+    if[0=caseCount; '"case field with 0 cases"];
+    vars[`nFieldTypes],:0x80;
+    vars[`nFieldSchema],:0x80  //type=ext
+        ,fieldExtType   //0x01=case, 0x02=case with default
+        ,(`byte$0-caseVarType)
+        ,.binp.unLE[`int$caseVarIndex]
+        ,$[fieldExtType=0x02;defaultCase;()]
+        ,.binp.unLE[`int$caseCount]
+        ,caseSchema;
+    vars[`ptr]+:1;    //process "end"
     vars};
 
 .binp.compileSchemaP1P1array:{[vars;tname]
@@ -32,7 +82,7 @@
             tb:`byte$(vars[`out][`recName]?rn)+20;
             vars[`ptr]+:1 //process record name
         ];
-    {'"unknown type in array"}[]];
+    {'"unknown type in array: ",x}[ename]];
     vars[`nFieldSchema],:tb;
     vars[`nFieldTypes],:tb;
     szt:vars[`tokens][vars[`ptr]];
@@ -82,6 +132,8 @@
         vars:.binp.compileSchemaP1P1atom[vars;tname];
       tname~"record";
         vars:.binp.compileSchemaP1P1record[vars;tname];
+      tname~"case";
+        vars:.binp.compileSchemaP1P1case[vars;tname];
       tname~"array";
         vars:.binp.compileSchemaP1P1array[vars;tname];
     {'"unknown type in field: ",x}[tname]];
@@ -98,7 +150,8 @@
     nFieldTypes:`byte$();
     ptr+:1; //process rec name
     vars2:`tokens`ptr`out`nFieldNames`nFieldSchema`nFieldTypes!(tokens;ptr;out;nFieldNames;nFieldSchema;nFieldTypes);
-    while[not (tokens[ptr]) like "end";  //'branch
+    while[not (tokens[ptr])~"end";  //'branch
+        if[not (tokens[ptr])~"field"; '"expected \"field\", found ",(tokens[ptr])];
         vars2:.binp.compileSchemaP1P1[vars2];
         ptr:vars2`ptr;
     ];
@@ -110,7 +163,7 @@
     `tokens`ptr`out!(tokens;ptr;out)};
 
 .binp.compileSchema:{[schema]
-    tokens:{x where 0<count each x}(-4!schema) except\:" \t\r\n";
+    tokens:{x where 0<count each x}(.binp.tokenize schema) except\:" \t\r\n";
     ptr:0;
     out:([]recName:`$(); fieldName:(); fieldSchema:());
     vars:`tokens`ptr`out!(tokens;ptr;out);

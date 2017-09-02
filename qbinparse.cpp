@@ -203,6 +203,69 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
     return ki(ni);
 }
 
+K parseCase(K schema, char *&ptr, char *end, char *&recschema, bool hasDefault,
+    K partialResult
+) {
+    uint8_t caseFieldType = *recschema;
+    ++recschema;
+    uint32_t caseFieldIndex = *(uint32_t*)recschema;
+    recschema += 4;
+    uint8_t defaultRec = 0;
+    if(hasDefault) {
+        defaultRec = *recschema;
+        ++recschema;
+    }
+    uint32_t caseFieldValue = 0;
+    switch(caseFieldType) {
+    case 4:
+        caseFieldValue = kK(partialResult)[caseFieldIndex]->g;
+        break;
+    case 5:
+        caseFieldValue = kK(partialResult)[caseFieldIndex]->h;
+        break;
+    case 6:
+        caseFieldValue = kK(partialResult)[caseFieldIndex]->i;
+        break;
+    case 7:
+        caseFieldValue = kK(partialResult)[caseFieldIndex]->j;
+        break;
+    default:
+        return ksym("invalidCaseFieldType");
+    }
+    uint32_t caseCount = *(uint32_t*)recschema;
+    recschema += 4;
+    bool found = false;
+    uint8_t caseRec = 0;
+    for (uint32_t i=0; i<caseCount; ++i) {
+        found = (*(uint32_t*)recschema) == caseFieldValue;
+        if(found) {
+            caseRec = *(recschema+4);
+            recschema += 5*(caseCount-i);
+            break;
+        }
+        recschema += 5;
+    }
+    if (!found) {
+        if(!hasDefault)
+            return ksym("noCaseMatch");
+        caseRec = defaultRec;
+    }
+    return parseRecord(schema, ptr, end, caseRec);
+}
+
+K parseExtType(K schema, char *&ptr, char *end, char *&recschema, K partialResult) {
+    uint8_t extSubtype = *recschema;
+    ++recschema;
+    switch(extSubtype) {
+    case 1:
+        return parseCase(schema, ptr, end, recschema, false, partialResult);
+    case 2:
+        return parseCase(schema, ptr, end, recschema, true, partialResult);
+    default:
+        return ksym("invalidExtType");
+    }
+}
+
 K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
     if (ptr >= end) return ksym("endOfBuffer");
     if (schemaindex >= kK(schema)[1]->n) {
@@ -215,7 +278,9 @@ K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
     for (size_t i=0; i<fieldCount; ++i) {
         char inst = *recschema;
         ++recschema;
-        if (inst <= -20) {
+        if (inst == -128) {
+            kK(result)[i] = parseExtType(schema, ptr, end, recschema, result);
+        } else if (inst <= -20) {
             kK(result)[i] = parseRecord(schema, ptr, end, (-inst)-20);
         } else if (inst > 0) {
             kK(result)[i] = parseArray(schema, ptr, end, recschema, result, -inst);
