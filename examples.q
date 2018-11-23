@@ -1,4 +1,5 @@
 \c 100000 100000
+
 {
     path:"/"sv -1_"/"vs ssr[;"\\";"/"]first -3#value .z.s;
     system"l ",path,"/qbinparse.q";
@@ -10,14 +11,22 @@ simpleRecord:.binp.compileSchema"
         field ypos real
     end
     ";
-.binp.parse[simpleRecord;0x0000f04200000243;`point] //`xpos`ypos!(120e;130e)
+if[not .binp.parse[simpleRecord;0x0000f04200000243;`point] ~`xpos`ypos!(120e;130e); '"failed"];
+
+mixedRecord:.binp.compileSchema"
+    record point
+        field xpos real
+        field ypos short
+    end
+    ";
+if[not .binp.parse[mixedRecord;0x0000f042f0d8;`point] ~`xpos`ypos!(120e;-10000h); '"failed"];
 
 simpleArray:.binp.compileSchema"
     record a
         field ints array int x 4
     end
     ";
-.binp.parse[simpleArray;0x01000000020000000300000004000000;`a]  //enlist[`ints]!enlist 1 2 3 4i
+if[not .binp.parse[simpleArray;0x01000000020000000300000004000000;`a]~enlist[`ints]!enlist 1 2 3 4i; '"failed"];
 
 varLengthArray:.binp.compileSchema"
     record a
@@ -25,7 +34,7 @@ varLengthArray:.binp.compileSchema"
         field ints array int xv intsL
     end
     ";
-.binp.parse[varLengthArray;0x0300010000000200000003000000;`a]  //`intsL`ints!(3h;1 2 3i)
+if[not .binp.parse[varLengthArray;0x0300010000000200000003000000;`a]~`intsL`ints!(3h;1 2 3i); '"failed"];
 
 varLengthRecArray:.binp.compileSchema"
     record point
@@ -38,7 +47,7 @@ varLengthRecArray:.binp.compileSchema"
         field points array record point xv pointsL
     end
     ";
-.binp.parse[varLengthRecArray;0x020001000000020000000300000004000000;`a]  //`pointsL`points!(2h;(`xpos`ypos!(1i;2i);`xpos`ypos!(3i;4i)))
+if[not .binp.parse[varLengthRecArray;0x020001000000020000000300000004000000;`a]~`pointsL`points!(2h;(`xpos`ypos!(1i;2i);`xpos`ypos!(3i;4i))); '"failed"];
 
 byteGuardAtomicArray:.binp.compileSchema"
     record a
@@ -47,7 +56,7 @@ byteGuardAtomicArray:.binp.compileSchema"
         field other byte
     end
     ";
-.binp.parse[byteGuardAtomicArray;0x0102050607080a0b0304;`a] //`items`guard`other!(513 1541 2055 2826h;0x03;0x04)
+if[not .binp.parse[byteGuardAtomicArray;0x0102050607080a0b0304;`a]~`items`guard`other!(513 1541 2055 2826h;0x03;0x04); '"failed"];
 
 shortGuardAtomicArray:.binp.compileSchema"
     record a
@@ -56,7 +65,7 @@ shortGuardAtomicArray:.binp.compileSchema"
         field other byte
     end
     ";
-.binp.parse[shortGuardAtomicArray;0x010203040506070803000a;`a] //`items`guard`other!(513 1027 1541 2055h;3h;0x0a)
+if[not .binp.parse[shortGuardAtomicArray;0x010203040506070803000a;`a]~`items`guard`other!(513 1027 1541 2055h;3h;0x0a); '"failed"];
 
 byteGuardRecordArray:.binp.compileSchema"
     record point
@@ -70,7 +79,7 @@ byteGuardRecordArray:.binp.compileSchema"
         field other byte
     end
     ";
-.binp.parse[byteGuardRecordArray;0x01000000020000000300000004000000ff04;`a] //`items`guard`other!(513 1541 2055 2826h;0x03;0x04)
+if[not .binp.parse[byteGuardRecordArray;0x01000000020000000300000004000000ff04;`a]~`items`guard`other!((`xpos`ypos!1 2i;`xpos`ypos!3 4i);0xff;0x04); '"failed"];
 
 recordWithCase:.binp.compileSchema"
     record caseA
@@ -94,12 +103,12 @@ recordWithCase:.binp.compileSchema"
         field guard byte
     end
     ";
-.binp.parse[recordWithCase;0x0001000000010200000300000001040002;`main]
-//`tags`guard!(`tag`data!(0x00;enlist[`contInt]!enlist 1i);
-//             `tag`data!(0x01;enlist[`contShort]!enlist 2h);
-//             `tag`data!(0x00;enlist[`contInt]!enlist 3i);
-//             `tag`data!(0x01;enlist[`contShort]!enlist 4h))
-//             ;0x02)
+if[not .binp.parse[recordWithCase;0x0001000000010200000300000001040002;`main]~
+    `tags`guard!((`tag`data!(0x00;enlist[`contInt]!enlist 1i);
+                 `tag`data!(0x01;enlist[`contShort]!enlist 2h);
+                 `tag`data!(0x00;enlist[`contInt]!enlist 3i);
+                 `tag`data!(0x01;enlist[`contShort]!enlist 4h));
+                 0x02); '"failed"];
 
 recordWithCase2:.binp.compileSchema"
     record caseA
@@ -123,12 +132,12 @@ recordWithCase2:.binp.compileSchema"
         field guard byte
     end
     ";
-.binp.parse[recordWithCase2;0x000000000000000001000000010000000000000002000000000000000000030000000100000000000000040002;`main]
-//`tags`guard!(`tag`data!(0j;enlist[`contInt]!enlist 1i);
-//             `tag`data!(1j;enlist[`contShort]!enlist 2h);
-//             `tag`data!(0j;enlist[`contInt]!enlist 3i);
-//             `tag`data!(1j;enlist[`contShort]!enlist 4h))
-//             ;0x02)
+if[not .binp.parse[recordWithCase2;0x000000000000000001000000010000000000000002000000000000000000030000000100000000000000040002;`main]~
+    `tags`guard!((`tag`data!(0j;enlist[`contInt]!enlist 1i);
+                 `tag`data!(1j;enlist[`contShort]!enlist 2h);
+                 `tag`data!(0j;enlist[`contInt]!enlist 3i);
+                 `tag`data!(1j;enlist[`contShort]!enlist 4h))
+                 ;0x02); '"failed"];
 
 recordWithCaseDefault:.binp.compileSchema"
     record caseA
@@ -152,9 +161,74 @@ recordWithCaseDefault:.binp.compileSchema"
         field guard byte
     end
     ";
-.binp.parse[recordWithCaseDefault;0x000100000038020000030000004f040002;`main]
-//`tags`guard!(`tag`data!(0x00;enlist[`contInt]!enlist 1i);
-//             `tag`data!(0x38;enlist[`contShort]!enlist 2h);
-//             `tag`data!(0x00;enlist[`contInt]!enlist 3i);
-//             `tag`data!(0x4f;enlist[`contShort]!enlist 4h))
-//             ;0x02)
+if[not .binp.parse[recordWithCaseDefault;0x000100000038020000030000004f040002;`main]~
+    `tags`guard!((`tag`data!(0x00;enlist[`contInt]!enlist 1i);
+    `tag`data!(0x38;enlist[`contShort]!enlist 2h);
+    `tag`data!(0x00;enlist[`contInt]!enlist 3i);
+    `tag`data!(0x4f;enlist[`contShort]!enlist 4h))
+    ;0x02); '"failed"];
+
+bigEndian:.binp.compileSchema"
+    record main
+        field f1 be short
+        field f2 be int
+    end
+    ";
+
+if[not .binp.parse[bigEndian;0x000100000001;`main]~`f1`f2!(1h;1i); '"failed"];
+
+repeatingAtom:.binp.compileSchema"
+    record main
+        field f1 array int repeat
+    end
+    ";
+if[not .binp.parse[repeatingAtom;0x010000000200000003000000;`main]~enlist[`f1]!enlist 1 2 3i; '"failed"];
+
+repeatingRecord:.binp.compileSchema"
+    record item
+        field a int
+        field b int
+    end
+    record main
+        field f1 array record item repeat
+    end
+    ";
+if[not .binp.parse[repeatingRecord;0x01000000020000000300000004000000;`main]~enlist[`f1]!enlist (`a`b!1 2i;`a`b!3 4i); '"failed"];
+
+emptyRecordList:.binp.compileSchema"
+    record item
+        field a int
+        field b int
+    end
+    record main
+        field f1 int
+        field f2 array record item x 0
+        field f3 int
+    end
+    ";
+if[not .binp.parse[emptyRecordList;0x0100000002000000;`main]~`f1`f2`f3!(1i;();2i); '"failed"];
+
+sizeTaggedRecord:.binp.compileSchema"
+    record item
+        field a byte
+        field b byte
+    end
+    record main
+        field f1C byte
+        field f1 parsedArray xv f1C array record item repeat
+        field f2 byte
+    end
+    ";
+if[not .binp.parse[sizeTaggedRecord;0x0401020304ff;`main]~`f1C`f1`f2!(0x04;(`a`b!0x0102;`a`b!0x0304);0xff); '"failed"];
+
+runPastInputTot:.binp.compileSchema"
+    record point
+        field xpos int
+        field ypos int
+    end
+
+    record main
+        field points array record point x 3
+    end
+    ";
+if[not .binp.parse[runPastInputTot;0x01000000020000000300000004000000;`main] ~enlist[`points]!enlist(`xpos`ypos!(1 2i);`xpos`ypos!(3 4i);`endOfBuffer); '"failed"];

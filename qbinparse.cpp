@@ -26,44 +26,58 @@ K kdup(K k) {
     return result;
 }
 
-inline K parseByte(char *&ptr) {
-    K result = kg(*ptr);
+inline G readByte(char *&ptr) {
+    G result = *ptr;
     ptr += 1;
     return result;
 }
 
-inline K parseShort(char *&ptr) {
-    K result = kh(*(uint16_t*)ptr);
+inline H readShort(char *&ptr) {
+    H result = *(uint16_t*)ptr;
     ptr += 2;
     return result;
 }
 
-inline K parseInt(char *&ptr) {
-    K result = ki(*(uint32_t*)ptr);
+inline H readBEShort(char *&ptr) {
+    uint16_t num = *(uint16_t*)ptr;
+    H result = ((num & 0xff00) >> 8) | (num << 8);
+    ptr += 2;
+    return result;
+}
+
+inline I readInt(char *&ptr) {
+    I result = *(uint32_t*)ptr;
     ptr += 4;
     return result;
 }
 
-inline K parseLong(char *&ptr) {
-    K result = kj(*(uint64_t*)ptr);
-    ptr += 8;
-    return result;
-}
-
-inline K parseReal(char *&ptr) {
-    K result = ke(*(float*)ptr);
+inline I readBEInt(char *&ptr) {
+    uint32_t num = *(uint32_t*)ptr;
+    I result = ((num & 0xff000000) >> 24) | ((num & 0x00ff0000) >> 8) | ((num & 0x0000ff00) << 8) | (num << 24);
     ptr += 4;
     return result;
 }
 
-inline K parseFloat(char *&ptr) {
-    K result = kf(*(double*)ptr);
+inline J readLong(char *&ptr) {
+    J result = *(uint64_t*)ptr;
     ptr += 8;
     return result;
 }
 
-inline K parseChar(char *&ptr) {
-    K result = kc(*ptr);
+inline E readReal(char *&ptr) {
+    E result = *(float*)ptr;
+    ptr += 4;
+    return result;
+}
+
+inline F readFloat(char *&ptr) {
+    F result = *(double*)ptr;
+    ptr += 8;
+    return result;
+}
+
+inline C readChar(char *&ptr) {
+    C result = *ptr;
     ptr += 1;
     return result;
 }
@@ -83,53 +97,162 @@ inline int getTypeSize(int typeNum) {
 
 K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex);
 
-inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult, int elementType) {
-    if (ptr >= end) return ksym("endOfBuffer");
-    char sizeMode = *recschema;
+inline K tot(K records) {   //to table - q should expose this feature
+    if(records->n == 0) return records;
+    for (J i=0; i<records->n; ++i) {    //error messages may replace some records
+        if (kK(records)[i]->t != 99) return records;
+    }
+    J columnCount = kK(kK(records)[0])[0]->n;
+    K columns = ktn(0, columnCount);
+    K labels = r1(kK(kK(records)[0])[0]);
+    for (J i=0; i<columns->n; ++i) {
+        K col;
+        J length = records->n;
+        int recType = kK(kK(records)[0])[1]->t;
+        if (recType != 0) { //all record fields are the same atomic type
+            switch(recType) {
+            case KG:
+                col = ktn(KG, length);
+                for (J j=0; j<length; ++j) kG(col)[j] = kG(kK(kK(records)[j])[1])[i];
+                break;
+            case KH:
+                col = ktn(KH, length);
+                for (J j=0; j<length; ++j) kH(col)[j] = kH(kK(kK(records)[j])[1])[i];
+                break;
+            case KI:
+                col = ktn(KI, length);
+                for (J j=0; j<length; ++j) kI(col)[j] = kI(kK(kK(records)[j])[1])[i];
+                break;
+            case KJ:
+                col = ktn(KJ, length);
+                for (J j=0; j<length; ++j) kJ(col)[j] = kJ(kK(kK(records)[j])[1])[i];
+                break;
+            case KE:
+                col = ktn(KE, length);
+                for (J j=0; j<length; ++j) kE(col)[j] = kE(kK(kK(records)[j])[1])[i];
+                break;
+            case KF:
+                col = ktn(KF, length);
+                for (J j=0; j<length; ++j) kF(col)[j] = kF(kK(kK(records)[j])[1])[i];
+                break;
+            case KC:
+                col = ktn(KC, length);
+                for (J j=0; j<length; ++j) kF(col)[j] = kC(kK(kK(records)[j])[1])[i];
+                break;
+            default:
+                return kerror("unhandled atomic type in array!");
+            }
+        } else {    //heterogeneous records
+            int colType = kK(kK(kK(records)[0])[1])[i]->t;
+            switch(colType) {
+            case -KG:
+                col = ktn(KG, length);
+                for (J j=0; j<length; ++j) kG(col)[j] = kK(kK(kK(records)[j])[1])[i]->g;
+                break;
+            case -KH:
+                col = ktn(KH, length);
+                for (J j=0; j<length; ++j) kH(col)[j] = kK(kK(kK(records)[j])[1])[i]->h;
+                break;
+            case -KI:
+                col = ktn(KI, length);
+                for (J j=0; j<length; ++j) kI(col)[j] = kK(kK(kK(records)[j])[1])[i]->i;
+                break;
+            case -KJ:
+                col = ktn(KJ, length);
+                for (J j=0; j<length; ++j) kJ(col)[j] = kK(kK(kK(records)[j])[1])[i]->j;
+                break;
+            case -KE:
+                col = ktn(KE, length);
+                for (J j=0; j<length; ++j) kE(col)[j] = kK(kK(kK(records)[j])[1])[i]->e;
+                break;
+            case -KF:
+                col = ktn(KF, length);
+                for (J j=0; j<length; ++j) kF(col)[j] = kK(kK(kK(records)[j])[1])[i]->f;
+                break;
+            case -KC:
+                col = ktn(KC, length);
+                for (J j=0; j<length; ++j) kC(col)[j] = kK(kK(kK(records)[j])[1])[i]->g;
+                break;
+            default:
+                col = ktn(0, length);
+                for (J j=0; j<length; ++j) kK(col)[j] = r1(kK(kK(kK(records)[j])[1])[i]);
+            }
+        }
+        kK(columns)[i] = col;
+    }
+    r0(records);
+    K result = xT(xD(labels, columns));
+    return result;
+}
+
+struct arraySizeResult {
+    enum {ok, endOfBuffer, badSizeSpec} status = ok;
     uint32_t size = 0;
     uint32_t guard = 0;
     bool fixedSize = true;
+    bool repeat = false;
+    char sizeMode;
+};
+
+arraySizeResult readArraySize(char *&ptr, char *end, char *&recschema, K partialResult) {
+    arraySizeResult result;
+    if (ptr >= end) {result.status = arraySizeResult::endOfBuffer; return result;}
+    result.sizeMode = *recschema;
     ++recschema;
-    switch(sizeMode) {
+    switch(result.sizeMode) {
     case 1:{
         char *eptr = ptr;
         while (eptr < end && *eptr != 0) ++eptr;
         ++eptr;
-        if (eptr > end) size = 2100000000;
-        size = eptr-ptr;
+        if (eptr > end) result.size = 2100000000;
+        result.size = eptr-ptr;
         break;
     };
     case 2:
     case 3:
     case 4:
-        fixedSize = false;
-        guard = *(uint32_t*)recschema;
+        result.fixedSize = false;
+        result.guard = *(uint32_t*)recschema;
+        break;
+    case 5:
+        result.repeat = true;
+        result.fixedSize = false;
         break;
     case 0:
-        size = *(uint32_t*)recschema;
+        result.size = *(uint32_t*)recschema;
         break;
     case -4:
-        size = kK(partialResult)[*(uint32_t*)recschema]->g;
+        result.size = kK(partialResult)[*(uint32_t*)recschema]->g;
         break;
     case -5:
-        size = kK(partialResult)[*(uint32_t*)recschema]->h;
+        result.size = kK(partialResult)[*(uint32_t*)recschema]->h;
         break;
     case -6:
-        size = kK(partialResult)[*(uint32_t*)recschema]->i;
+        result.size = kK(partialResult)[*(uint32_t*)recschema]->i;
         break;
     case -7:
-        size = kK(partialResult)[*(uint32_t*)recschema]->j;
+        result.size = kK(partialResult)[*(uint32_t*)recschema]->j;
         break;
+    default:
+        result.status = arraySizeResult::badSizeSpec;
+        return result;
     }
     recschema += 4;
-    if(fixedSize) {
-        if(size >= 2100000000) {
+    return result;
+}
+
+inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult, int elementType) {
+    arraySizeResult as = readArraySize(ptr, end, recschema, partialResult);
+    if (as.status == arraySizeResult::endOfBuffer) return ksym("endOfBuffer");
+    if (as.status == arraySizeResult::badSizeSpec) return ksym("invalidArraySizeSpecifier");
+    if (as.fixedSize) {
+        if(as.size >= 2100000000) {
             ptr = end;
             return ksym("tooLargeArray");
         }
         if (elementType > -20) {
-            K result = ktn(-elementType,size);
-            uint64_t fullsize = uint64_t(size)*getTypeSize(elementType);
+            K result = ktn(-elementType, as.size);
+            uint64_t fullsize = uint64_t(as.size)*getTypeSize(elementType);
             if(fullsize > 4200000000) {
                 ptr = end;
                 return ksym("tooLargeArray");
@@ -139,7 +262,7 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
             ptr += fullsize;
             return result;
         } else if (elementType <= -20) {
-            uint64_t fullsize = uint64_t(size)*sizeof(void*);
+            uint64_t fullsize = uint64_t(as.size)*sizeof(void*);
             if(fullsize > 4200000000) {
                 ptr = end;
                 return ksym("tooLargeArray");
@@ -148,28 +271,31 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
                 ptr = end;
                 return ksym("arrayRunsPastInput");
             }
-            K result = ktn(0,size);
-            for (size_t i=0;i<size; ++i) {
+            K result = ktn(0,as.size);
+            for (size_t i=0;i<as.size; ++i) {
                 kK(result)[i] = parseRecord(schema, ptr, end, (-elementType)-20);
             }
-            return result;
+            K res = tot(result);
+            return res;
         }
     } else {    //not fixedSize
-        if(elementType > -20) {
+        if(elementType > -20) { //elements are atoms
             K result = ktn(-elementType,0);
             int elementSize = getTypeSize(elementType);
             while(ptr < end) {
                 bool cond = false;
-                switch(sizeMode) {
-                    case 2:
-                        cond = *(uint8_t *)ptr == guard;
-                        break;
-                    case 3:
-                        cond = *(uint16_t *)ptr == guard;
-                        break;
-                    case 4:
-                        cond = *(uint32_t *)ptr == guard;
-                        break;
+                if (!as.repeat) {
+                    switch(as.sizeMode) {
+                        case 2:
+                            cond = *(uint8_t *)ptr == as.guard;
+                            break;
+                        case 3:
+                            cond = *(uint16_t *)ptr == as.guard;
+                            break;
+                        case 4:
+                            cond = *(uint32_t *)ptr == as.guard;
+                            break;
+                    }
                 }
                 if (cond) break;
                 uint64_t atom;
@@ -178,26 +304,28 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
                 ja(&result, &atom);
             }
             return result;
-        } else {
+        } else {    //elements are records
             K result = ktn(0,0);
             while(ptr < end) {
                 bool cond = false;
-                switch(sizeMode) {
-                    case 2:
-                        cond = *(uint8_t *)ptr == guard;
-                        break;
-                    case 3:
-                        cond = *(uint16_t *)ptr == guard;
-                        break;
-                    case 4:
-                        cond = *(uint32_t *)ptr == guard;
-                        break;
+                if (!as.repeat) {
+                    switch(as.sizeMode) {
+                        case 2:
+                            cond = *(uint8_t *)ptr == as.guard;
+                            break;
+                        case 3:
+                            cond = *(uint16_t *)ptr == as.guard;
+                            break;
+                        case 4:
+                            cond = *(uint32_t *)ptr == as.guard;
+                            break;
+                    }
                 }
                 if (cond) break;
                 K rec = parseRecord(schema, ptr, end, (-elementType)-20);
                 jk(&result, rec);
             }
-            return result;
+            return tot(result);
         }
     }
     return ki(ni);
@@ -206,7 +334,7 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
 K parseCase(K schema, char *&ptr, char *end, char *&recschema, bool hasDefault,
     K partialResult
 ) {
-    uint8_t caseFieldType = *recschema;
+    int8_t caseFieldType = *recschema;
     ++recschema;
     uint32_t caseFieldIndex = *(uint32_t*)recschema;
     recschema += 4;
@@ -217,17 +345,20 @@ K parseCase(K schema, char *&ptr, char *end, char *&recschema, bool hasDefault,
     }
     uint32_t caseFieldValue = 0;
     switch(caseFieldType) {
-    case 4:
+    case -4:
         caseFieldValue = kK(partialResult)[caseFieldIndex]->g;
         break;
-    case 5:
+    case -5:
         caseFieldValue = kK(partialResult)[caseFieldIndex]->h;
         break;
-    case 6:
+    case -6:
         caseFieldValue = kK(partialResult)[caseFieldIndex]->i;
         break;
-    case 7:
+    case -7:
         caseFieldValue = kK(partialResult)[caseFieldIndex]->j;
+        break;
+    case 10:
+        caseFieldValue = *(uint32_t*)kG(kK(partialResult)[caseFieldIndex]);
         break;
     default:
         return ksym("invalidCaseFieldType");
@@ -253,6 +384,19 @@ K parseCase(K schema, char *&ptr, char *end, char *&recschema, bool hasDefault,
     return parseRecord(schema, ptr, end, caseRec);
 }
 
+K parseField(K schema, char *&ptr, char *end, char *&recschema, K partialResult);
+
+K parseInterpretedArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult) {
+    arraySizeResult as = readArraySize(ptr, end, recschema, partialResult);
+    if (as.status == arraySizeResult::badSizeSpec) return ksym("invalidArraySizeSpecifier");
+    char *tmpPtr = ptr;
+    char *tmpEnd = ptr+as.size;
+    if (as.status == arraySizeResult::endOfBuffer) tmpEnd = ptr;
+    K result = parseField(schema, tmpPtr, tmpEnd, recschema, partialResult);
+    ptr = tmpEnd;
+    return result;
+}
+
 K parseExtType(K schema, char *&ptr, char *end, char *&recschema, K partialResult) {
     uint8_t extSubtype = *recschema;
     ++recschema;
@@ -261,53 +405,102 @@ K parseExtType(K schema, char *&ptr, char *end, char *&recschema, K partialResul
         return parseCase(schema, ptr, end, recschema, false, partialResult);
     case 2:
         return parseCase(schema, ptr, end, recschema, true, partialResult);
+    case 3:
+        return kh(readBEShort(ptr));
+    case 4:
+        return ki(readBEInt(ptr));
+    case 5:
+        return parseInterpretedArray(schema, ptr, end, recschema, partialResult);
     default:
         return ksym("invalidExtType");
     }
 }
 
+K parseField(K schema, char *&ptr, char *end, char *&recschema, K partialResult) {
+    char fieldType = *recschema;
+    ++recschema;
+    if (fieldType == -128) {
+        return parseExtType(schema, ptr, end, recschema, partialResult);
+    } else if (fieldType <= -20) {
+        return parseRecord(schema, ptr, end, (-fieldType)-20);
+    } else if (fieldType > 0) {
+        return parseArray(schema, ptr, end, recschema, partialResult, -fieldType);
+    } else switch(fieldType) {
+    case -4:
+        return kg(readByte(ptr));
+        break;
+    case -5:
+        return kh(readShort(ptr));
+        break;
+    case -6:
+        return ki(readInt(ptr));
+        break;
+    case -7:
+        return kj(readLong(ptr));
+        break;
+    case -8:
+        return ke(readReal(ptr));
+        break;
+    case -9:
+        return kf(readFloat(ptr));
+        break;
+    case -10:
+        return kc(readChar(ptr));
+        break;
+    default:
+        return ki(ni);
+    }
+}
+
 K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
-    if (ptr >= end) return ksym("endOfBuffer");
     if (schemaindex >= kK(schema)[1]->n) {
         return ksym("invalidSchemaId");
     }
     K fieldLabels = kK(kK(schema)[1])[schemaindex];
     size_t fieldCount = fieldLabels->n;
+    if (fieldCount > 0 && ptr >= end) {
+        return ksym("endOfBuffer");
+    }
     char *recschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
-    K result = ktn(0, fieldCount);
+    int resultType = 0; //create a simple list if all fields in the record are atomic types
     for (size_t i=0; i<fieldCount; ++i) {
-        char inst = *recschema;
-        ++recschema;
-        if (inst == -128) {
-            kK(result)[i] = parseExtType(schema, ptr, end, recschema, result);
-        } else if (inst <= -20) {
-            kK(result)[i] = parseRecord(schema, ptr, end, (-inst)-20);
-        } else if (inst > 0) {
-            kK(result)[i] = parseArray(schema, ptr, end, recschema, result, -inst);
-        } else switch(inst) {
-        case -4:
-            kK(result)[i] = parseByte(ptr);
-            break;
-        case -5:
-            kK(result)[i] = parseShort(ptr);
-            break;
-        case -6:
-            kK(result)[i] = parseInt(ptr);
-            break;
-        case -7:
-            kK(result)[i] = parseLong(ptr);
-            break;
-        case -8:
-            kK(result)[i] = parseReal(ptr);
-            break;
-        case -9:
-            kK(result)[i] = parseFloat(ptr);
-            break;
-        case -10:
-            kK(result)[i] = parseChar(ptr);
-            break;
-        default:
-            kK(result)[i] = ki(ni);
+        int8_t nextType = recschema[i];
+        if (nextType>=0 || nextType<=-20) { resultType = 0; break; }
+        if (i > 0) {
+            if (resultType != -nextType) { resultType = 0; break; }
+        } else
+            resultType = -nextType;
+    }
+    K result = ktn(resultType, fieldCount);
+    for (size_t i=0; i<fieldCount; ++i) {
+        if (resultType == 0) {
+            kK(result)[i] = parseField(schema, ptr, end, recschema, result);
+        } else {
+            char fieldType = *recschema;
+            ++recschema;
+            switch(fieldType) {
+            case -4:
+                kG(result)[i] = readByte(ptr);
+                break;
+            case -5:
+                kH(result)[i] = readShort(ptr);
+                break;
+            case -6:
+                kI(result)[i] = readInt(ptr);
+                break;
+            case -7:
+                kJ(result)[i] = readLong(ptr);
+                break;
+            case -8:
+                kE(result)[i] = readReal(ptr);
+                break;
+            case -9:
+                kF(result)[i] = readFloat(ptr);
+                break;
+            case -10:
+                kC(result)[i] = readChar(ptr);
+                break;
+            }
         }
     }
     return xD(r1(fieldLabels),result);
@@ -320,7 +513,7 @@ K k_binparse_parse(K schema, K input, K mainType) {
     char *ptr = (char*)kG(input);
     char *end = ptr+input->n;
     for (size_t i=0; i<kK(schema)[0]->n; ++i) {
-        if (kS(kK(schema)[0])[i] == mainType->s) {
+        if (kS(kK(schema)[0])[i] == ssym(mainType->s)) {
             K result = parseRecord(schema, ptr, end, i);
             if (ptr < end) {
                 kK(result)[0] = kdup(kK(result)[0]);
