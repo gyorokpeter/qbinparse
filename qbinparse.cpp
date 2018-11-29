@@ -103,6 +103,7 @@ inline K tot(K records) {   //to table - q should expose this feature
         if (kK(records)[i]->t != 99) return records;
     }
     J columnCount = kK(kK(records)[0])[0]->n;
+    if (columnCount == 0) return records;
     K columns = ktn(0, columnCount);
     K labels = r1(kK(kK(records)[0])[0]);
     for (J i=0; i<columns->n; ++i) {

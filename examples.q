@@ -232,3 +232,15 @@ runPastInputTot:.binp.compileSchema"
     end
     ";
 if[not .binp.parse[runPastInputTot;0x01000000020000000300000004000000;`main] ~enlist[`points]!enlist(`xpos`ypos!(1 2i);`xpos`ypos!(3 4i);`endOfBuffer); '"failed"];
+
+emptyRecArray:.binp.compileSchema"
+    record rEmpty
+    end
+
+    record main
+        field f1 byte
+        field f2 array record rEmpty x 1
+        field f3 int
+    end
+    ";
+if[not .binp.parse[emptyRecArray; 0x0000000000;`main]~`f1`f2`f3!(0x00;enlist(`symbol$())!();0i); '"failed"];
