@@ -268,10 +268,6 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
                 ptr = end;
                 return ksym("tooLargeArray");
             }
-            if(ptr+fullsize > end) {
-                ptr = end;
-                return ksym("arrayRunsPastInput");
-            }
             K result = ktn(0,as.size);
             for (size_t i=0;i<as.size; ++i) {
                 kK(result)[i] = parseRecord(schema, ptr, end, (-elementType)-20);

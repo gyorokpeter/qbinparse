@@ -244,3 +244,14 @@ emptyRecArray:.binp.compileSchema"
     end
     ";
 if[not .binp.parse[emptyRecArray; 0x0000000000;`main]~`f1`f2`f3!(0x00;enlist(`symbol$())!();0i); '"failed"];
+
+longArraySize:.binp.compileSchema"
+    record r1
+        field id short
+    end
+
+    record main
+        field f1 array record r1 x 16
+    end
+    ";
+if[not .binp.parse[longArraySize; 32#0x0100;`main]~enlist[`f1]!enlist([]id:16#1h); '"failed"];
