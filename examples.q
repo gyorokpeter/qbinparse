@@ -255,3 +255,11 @@ longArraySize:.binp.compileSchema"
     end
     ";
 if[not .binp.parse[longArraySize; 32#0x0100;`main]~enlist[`f1]!enlist([]id:16#1h); '"failed"];
+
+emptyArrayLast:.binp.compileSchema"
+    record main
+        field f1L byte
+        field f1 array short xv f1L
+    end
+    ";
+if[not .binp.parse[emptyArrayLast; enlist 0x00;`main]~`f1L`f1!(0x00;`short$()); '"failed"];

@@ -197,7 +197,7 @@ struct arraySizeResult {
 
 arraySizeResult readArraySize(char *&ptr, char *end, char *&recschema, K partialResult) {
     arraySizeResult result;
-    if (ptr >= end) {result.status = arraySizeResult::endOfBuffer; return result;}
+    if (ptr > end) {result.status = arraySizeResult::endOfBuffer; return result;}
     result.sizeMode = *recschema;
     ++recschema;
     switch(result.sizeMode) {
@@ -205,7 +205,7 @@ arraySizeResult readArraySize(char *&ptr, char *end, char *&recschema, K partial
         char *eptr = ptr;
         while (eptr < end && *eptr != 0) ++eptr;
         ++eptr;
-        if (eptr > end) result.size = 2100000000;
+        if (eptr > end) result.status = arraySizeResult::endOfBuffer;
         result.size = eptr-ptr;
         break;
     };
