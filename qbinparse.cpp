@@ -82,6 +82,18 @@ inline C readChar(char *&ptr) {
     return result;
 }
 
+inline I readDotNetVarLengthInt(char *&ptr) {
+    I result = 0;
+    int bit = 0;
+    uint8_t next;
+    do {
+        next = *ptr++;
+        result |= (next & 0x7f) << bit;
+        bit += 7;
+    } while (next & 0x80);
+    return result;
+}
+
 inline int getTypeSize(int typeNum) {
     switch(typeNum) {
         case -4: return 1;
@@ -183,6 +195,26 @@ inline K tot(K records) {   //to table - q should expose this feature
     }
     r0(records);
     K result = xT(xD(labels, columns));
+    return result;
+}
+
+K appendGen(K list, K value) {
+    K result = ktn(0, list->n+1);
+    for (size_t i=0; i<list->n; ++i) {
+        switch(list->t) {
+            case 0: kK(result)[i] = r1(kK(list)[i]); break;
+            case KC: kK(result)[i] = kc(kC(list)[i]); break;
+            case KG: kK(result)[i] = kg(kG(list)[i]); break;
+            case KH: kK(result)[i] = kh(kH(list)[i]); break;
+            case KI: kK(result)[i] = ki(kI(list)[i]); break;
+            case KJ: kK(result)[i] = kj(kJ(list)[i]); break;
+            case KE: kK(result)[i] = ke(kE(list)[i]); break;
+            case KF: kK(result)[i] = kf(kF(list)[i]); break;
+            default: kK(result)[i] = ki(ni);
+        }
+    }
+    kK(result)[list->n] = value;
+    r0(list);
     return result;
 }
 
@@ -408,6 +440,8 @@ K parseExtType(K schema, char *&ptr, char *end, char *&recschema, K partialResul
         return ki(readBEInt(ptr));
     case 5:
         return parseInterpretedArray(schema, ptr, end, recschema, partialResult);
+    case 6:
+        return ki(readDotNetVarLengthInt(ptr));
     default:
         return ksym("invalidExtType");
     }
@@ -460,8 +494,19 @@ K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
     }
     char *recschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
     int resultType = 0; //create a simple list if all fields in the record are atomic types
+    char *schemaScan = recschema;
     for (size_t i=0; i<fieldCount; ++i) {
-        int8_t nextType = recschema[i];
+        int8_t nextType = *schemaScan;
+        ++schemaScan;
+        if (nextType==-128) {
+            int8_t ext = *schemaScan;
+            ++schemaScan;
+            switch(ext) {
+                case 3: nextType=-5; break;
+                case 4: nextType=-6; break;
+                case 6: nextType=-6; break;
+            }
+        }
         if (nextType>=0 || nextType<=-20) { resultType = 0; break; }
         if (i > 0) {
             if (resultType != -nextType) { resultType = 0; break; }
@@ -497,6 +542,21 @@ K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
             case -10:
                 kC(result)[i] = readChar(ptr);
                 break;
+            case -128:
+                char ext = *recschema;
+                ++recschema;
+                switch(ext) {
+                case 3:
+                    kH(result)[i] = readBEShort(ptr);
+                    break;
+                case 4:
+                    kI(result)[i] = readBEInt(ptr);
+                    break;
+                case 6:
+                    kI(result)[i] = readDotNetVarLengthInt(ptr);
+                    break;
+                }
+                break;
             }
         }
     }
@@ -518,7 +578,7 @@ K k_binparse_parse(K schema, K input, K mainType) {
                 K fillerValue = ktn(4, end-ptr);
                 memcpy(kG(fillerValue), ptr, end-ptr);
                 js(&kK(result)[0], fillerKey);
-                jk(&kK(result)[1], fillerValue);
+                kK(result)[1] = appendGen(kK(result)[1], fillerValue);
             }
             return result;
         }

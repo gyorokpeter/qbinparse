@@ -263,3 +263,26 @@ emptyArrayLast:.binp.compileSchema"
     end
     ";
 if[not .binp.parse[emptyArrayLast; enlist 0x00;`main]~`f1L`f1!(0x00;`short$()); '"failed"];
+
+remainingSimple:.binp.compileSchema"
+    record main
+        field f1 int
+    end
+    ";
+if[not .binp.parse[remainingSimple; 0x0100000002000000;`main]~`f1`xxxRemainingData!(1i;0x02000000); '"failed"];
+
+remainingGen:.binp.compileSchema"
+    record main
+        field f1 int
+        field f2 short
+    end
+    ";
+if[not .binp.parse[remainingGen; 0x0100000002000000;`main]~`f1`f2`xxxRemainingData!(1i;2h;0x0000); '"failed"];
+
+varlengths:.binp.compileSchema"
+    record main
+        field f1 dotnetVarLengthInt
+        field f2 dotnetVarLengthInt
+    end
+    ";
+if[not .binp.parse[varlengths;0x01bc01;`main]~`f1`f2!1 188i; '"failed"];
