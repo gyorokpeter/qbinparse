@@ -286,3 +286,13 @@ varlengths:.binp.compileSchema"
     end
     ";
 if[not .binp.parse[varlengths;0x01bc01;`main]~`f1`f2!1 188i; '"failed"];
+
+unsigned:.binp.compileSchema"
+    record main
+        field f1 int
+        field f2 short
+        field f3 uint
+        field f4 ushort
+    end
+    ";
+if[not .binp.parse[unsigned; 0xffffffffffffffffffffffff;`main]~`f1`f2`f3`f4!(-1i;-1h;4294967295j;65535i); '"failed"];

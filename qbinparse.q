@@ -25,6 +25,8 @@
 //0x8004 = big endian int
 //0x8005 = parsed array (with length, type)
 //0x8006 = .NET style variable-length int
+//0x8007 = unsigned short (returned as int)
+//0x8008 = unsigned int (returned as long)
 
 .binp.compileSchemaP1P1atom:{[vars;tname]
     tb:`byte$neg type value "`",tname,"$()";
@@ -50,6 +52,15 @@
     extType:(`short`int!0x0304)tname;
     vars[`nFieldSchema],:0x80,extType;
     vars[`nFieldTypes],:tb;
+    vars};
+
+.binp.compileSchemaP1P1atomunsigned:{[vars;tname]
+    $[tname~"ushort";
+        [vars[`nFieldSchema],:0x8007;vars[`nFieldTypes],:`byte$-6];
+      tname~"uint";
+        [vars[`nFieldSchema],:0x8008;vars[`nFieldTypes],:`byte$-7];
+      '"unknown unsgined type: ",tname
+    ];
     vars};
 
 .binp.compileSchemaP1P1record:{[vars;tname]
@@ -184,6 +195,8 @@
     vars[`ptr]+:1; //process type name
     $[tname in ("char";"byte";"short";"int";"long";"real";"float");
         vars:.binp.compileSchemaP1P1atom[vars;tname];
+      tname in ("ushort";"uint");
+        vars:.binp.compileSchemaP1P1atomunsigned[vars;tname];
       tname~"dotnetVarLengthInt";
         vars:.binp.compileSchemaP1P1atomEx[vars;tname];
       tname~"be";

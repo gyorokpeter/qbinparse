@@ -442,6 +442,10 @@ K parseExtType(K schema, char *&ptr, char *end, char *&recschema, K partialResul
         return parseInterpretedArray(schema, ptr, end, recschema, partialResult);
     case 6:
         return ki(readDotNetVarLengthInt(ptr));
+    case 7:
+        return ki((uint16_t)readShort(ptr));
+    case 8:
+        return kj((uint32_t)readInt(ptr));
     default:
         return ksym("invalidExtType");
     }
