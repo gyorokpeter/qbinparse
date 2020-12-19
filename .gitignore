@@ -1,3 +1,4 @@
 qbinparse*.dll
 libq.a
 config.cmd
+shell.cmd
