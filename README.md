@@ -71,6 +71,6 @@ schemaStr:"
 schema:.binp.compileSchema schemaStr;
 .binp.parse[schema;0x060048656c6c6f;`stringWithShortLen]
 ```
-Returns: `length`str!(6h;"Hello")
+Returns: ``` `length`str!(6h;"Hello") ```
 
 See also examples.q.
