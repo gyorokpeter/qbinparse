@@ -6,9 +6,9 @@
     }[];
 
 .binp.debug:0b;
-.binp.parse:{
-    if[.binp.debug; (`$":",.binp.priv.path,"/lastExample") set (x;y;z)];
-    .binp.priv.parse[x;y;z]};
+.binp.parse:{[schema;data;mainType]
+    if[.binp.debug; (`$":",.binp.priv.path,"/lastExample") set (schema;data;mainType)];
+    .binp.priv.parse[schema;data;mainType]};
 
 .binp.unLE:{$[-4h=type x;enlist x;reverse 0x00 vs x]};
 
