@@ -3,6 +3,7 @@
     lib:`$":",.binp.priv.path,"/qbinparse";
     .binp.priv.parse:lib 2:(`k_binparse_parse;3);
     .binp.parseRepeat:lib 2:(`k_binparse_parseRepeat;3);
+    .binp.unparse:lib 2:(`k_binparse_unparse;3);
     }[];
 
 .binp.debug:0b;

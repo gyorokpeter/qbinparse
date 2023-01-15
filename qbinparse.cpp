@@ -1,9 +1,16 @@
 #define KXVER 3
 #include "k.h"
+#undef kC
 #include <stdint.h>
 #include <string.h>
+#include <stdexcept>
+#include <vector>
+#include <map>
 
-extern "C" {
+//Patches for k.h to work under C++
+inline char *kC(K k) {
+    return (char*)k->G0;
+}
 
 K kerror(const char *err) {
     return krr(const_cast<S>(err));
@@ -26,6 +33,8 @@ K kdup(K k) {
     return result;
 }
 
+//Parsing
+
 inline G readByte(char *&ptr) {
     G result = *ptr;
     ptr += 1;
@@ -38,9 +47,13 @@ inline H readShort(char *&ptr) {
     return result;
 }
 
+inline uint16_t flipEndian(uint16_t val) {
+    return ((val & 0xff00) >> 8) | (val << 8);
+}
+
 inline H readBEShort(char *&ptr) {
     uint16_t num = *(uint16_t*)ptr;
-    H result = ((num & 0xff00) >> 8) | (num << 8);
+    H result = flipEndian(num);
     ptr += 2;
     return result;
 }
@@ -51,9 +64,13 @@ inline I readInt(char *&ptr) {
     return result;
 }
 
+inline uint32_t flipEndian(uint32_t val) {
+    return ((val & 0xff000000) >> 24) | ((val & 0x00ff0000) >> 8) | ((val & 0x0000ff00) << 8) | (val << 24);
+}
+
 inline I readBEInt(char *&ptr) {
     uint32_t num = *(uint32_t*)ptr;
-    I result = ((num & 0xff000000) >> 24) | ((num & 0x00ff0000) >> 8) | ((num & 0x0000ff00) << 8) | (num << 24);
+    I result = flipEndian(num);
     ptr += 4;
     return result;
 }
@@ -222,18 +239,74 @@ struct arraySizeResult {
     enum {ok, endOfBuffer, badSizeSpec} status = ok;
     uint32_t size = 0;
     uint32_t guard = 0;
-    bool fixedSize = true;
+    uint32_t sizeFieldIndex = 0;
+    bool constantSize = false;   //xv
+    bool fixedSize = true;  //size known in advance, e.g. xv OR size from other field
     bool repeat = false;
     char sizeMode;
 };
 
-arraySizeResult readArraySize(char *&ptr, char *end, char *&recschema, K partialResult) {
+arraySizeResult readArraySizeFromSchema(char *&recschema) {
     arraySizeResult result;
-    if (ptr > end) {result.status = arraySizeResult::endOfBuffer; return result;}
     result.sizeMode = *recschema;
     ++recschema;
     switch(result.sizeMode) {
-    case 1:{
+    case 0:
+        result.constantSize = true;
+        result.size = *(uint32_t*)recschema;
+        break;
+    case 1: //"xz" - zero terminated
+        break;
+    case 2: //"tpb" - byte guard
+    case 3: //"tps" - short guard
+    case 4: //"tpi" - int guard
+        result.fixedSize = false;
+        result.guard = *(uint32_t*)recschema;
+        break;
+    case 5: //"repeat"
+        result.repeat = true;
+        result.fixedSize = false;
+        break;
+    case -4:    //"xv" - use byte field
+    case -5:    //"xv" - use short field
+    case -6:    //"xv" - use int field
+    case -7:    //"xv" - use long field
+        result.sizeFieldIndex = *(uint32_t*)recschema;
+        break;
+    default:
+        result.status = arraySizeResult::badSizeSpec;
+        return result;
+    }
+    recschema += 4;
+    return result;
+}
+
+arraySizeResult readArraySizeFromSchemaWithPartial(char *&recschema, K partialResult) {
+    arraySizeResult result = readArraySizeFromSchema(recschema);
+    switch(result.sizeMode) {
+    case -4:    //"xv" - use byte field
+        result.size = kK(partialResult)[result.sizeFieldIndex]->g;
+        break;
+    case -5:    //"xv" - use short field
+        result.size = kK(partialResult)[result.sizeFieldIndex]->h;
+        break;
+    case -6:    //"xv" - use int field
+        result.size = kK(partialResult)[result.sizeFieldIndex]->i;
+        break;
+    case -7:    //"xv" - use long field
+        result.size = kK(partialResult)[result.sizeFieldIndex]->j;
+        break;
+    default:
+        break;
+    }
+    return result;
+}
+
+arraySizeResult readArraySize(char *&ptr, char *end, char *&recschema, K partialResult) {
+    arraySizeResult result = readArraySizeFromSchemaWithPartial(recschema, partialResult);
+    if (ptr > end) {result.status = arraySizeResult::endOfBuffer; return result;}
+    switch(result.sizeMode) {
+    case 1:{    //"xz" - zero terminated
         char *eptr = ptr;
         while (eptr < end && *eptr != 0) ++eptr;
         ++eptr;
@@ -241,36 +314,23 @@ arraySizeResult readArraySize(char *&ptr, char *end, char *&recschema, K partial
         result.size = eptr-ptr;
         break;
     };
+    //size already read by readArraySizeFromSchema
     case 2:
     case 3:
     case 4:
-        result.fixedSize = false;
-        result.guard = *(uint32_t*)recschema;
         break;
     case 5:
-        result.repeat = true;
-        result.fixedSize = false;
         break;
     case 0:
-        result.size = *(uint32_t*)recschema;
         break;
     case -4:
-        result.size = kK(partialResult)[*(uint32_t*)recschema]->g;
-        break;
     case -5:
-        result.size = kK(partialResult)[*(uint32_t*)recschema]->h;
-        break;
     case -6:
-        result.size = kK(partialResult)[*(uint32_t*)recschema]->i;
-        break;
     case -7:
-        result.size = kK(partialResult)[*(uint32_t*)recschema]->j;
         break;
     default:
         result.status = arraySizeResult::badSizeSpec;
-        return result;
     }
-    recschema += 4;
     return result;
 }
 
@@ -567,6 +627,448 @@ K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
     return xD(r1(fieldLabels),result);
 }
 
+// Serialization
+
+class Buffer {
+    uint8_t *data_;
+    size_t pos_;
+    size_t limit_;
+    void ensureSpace(size_t size) {
+        while (pos_+size>limit_) grow();
+    }
+public:
+    Buffer() : data_(new uint8_t[1000]), pos_(0), limit_(1000) {}
+    Buffer(const Buffer &other) = delete;
+    ~Buffer() { delete[] data_; }
+    Buffer &operator=(const Buffer &other) = delete;
+    inline void grow() {
+        uint8_t *ndata = new uint8_t[10*limit_];
+        memcpy(ndata, data_, pos_);
+        delete[] data_;
+        data_ = ndata;
+        limit_ = 10*limit_;
+    }
+    Buffer &write(const Buffer &other) {
+        size_t size = other.size();
+        ensureSpace(size);
+        memcpy(data_+pos_, other.data(), size);
+        pos_+=size;
+        return *this;
+    }
+    Buffer &write(const uint8_t *from, size_t size) {
+        ensureSpace(size);
+        memcpy(data_+pos_, from, size);
+        pos_+=size;
+        return *this;
+    }
+    Buffer &writeFiller(size_t size) {
+        ensureSpace(size);
+        memset(data_+pos_, 0, size);
+        pos_+=size;
+        return *this;
+    }
+    template<typename T>
+    Buffer &write(T from) {
+        ensureSpace(sizeof(T));
+        *(T*)(data_+pos_) = from;
+        pos_+=sizeof(T);
+        return *this;
+    }
+    size_t size() const { return pos_; }
+    const uint8_t *data() const { return data_; }
+};
+
+uint8_t getByteFromK(K k, size_t index) {
+    switch(k->t) {
+        case 4:
+            return kG(k)[index];
+        default:
+            throw std::runtime_error("can't convert type "+std::to_string(k->t)+" to byte");
+    }
+}
+
+int16_t getShortFromK(K k, size_t index) {
+    switch(k->t) {
+        case 0: {
+            K elem = kK(k)[index];
+            switch(elem->t) {
+            case -5:
+                return elem->h;
+            default:
+                throw std::runtime_error("can't convert type "+std::to_string(elem->t)+" to short");
+            }
+        }
+        case 5:
+            return kH(k)[index];
+        default:
+            throw std::runtime_error("can't convert type "+std::to_string(k->t)+" to short");
+    }
+}
+
+float getRealFromK(K k, size_t index) {
+    switch(k->t) {
+        case 0: {
+            K elem = kK(k)[index];
+            switch(elem->t) {
+            case -8:
+                return elem->e;
+            default:
+                throw std::runtime_error("can't convert type "+std::to_string(elem->t)+" to real");
+            }
+        }
+        case 8:
+            return kE(k)[index];
+        default:
+            throw std::runtime_error("can't convert type "+std::to_string(k->t)+" to real");
+    }
+}
+
+template<typename Ct>
+Ct getElemFromK(K k, size_t index) {
+    switch(k->t) {
+        case 0: {
+            K elem = kK(k)[index];
+            switch(elem->t) {
+            case -4:
+                return elem->g;
+            case -5:
+                return elem->h;
+            case -6:
+                return elem->i;
+            case -7:
+                return elem->j;
+            case -8:
+                return elem->e;
+            case -9:
+                return elem->f;
+            default:
+                throw std::runtime_error("getElemFromK can't read type "+std::to_string(elem->t)+" from general list");
+            }
+        }
+        case 4:
+            return kG(k)[index];
+        case 5:
+            return kH(k)[index];
+        case 6:
+            return kI(k)[index];
+        case 7:
+            return kJ(k)[index];
+        case 8:
+            return kE(k)[index];
+        case 9:
+            return kF(k)[index];
+        default:
+            throw std::runtime_error("getElemFromK can't read type "+std::to_string(k->t)+" from simple list");
+    }
+}
+
+template<typename Ct, int Qt>
+Buffer &unparseArray(Buffer &buf, char *&recschema, K inFieldElem) {
+    arraySizeResult arrsz = readArraySizeFromSchema(recschema);
+    if (arrsz.constantSize && arrsz.size != inFieldElem->n) {
+        throw std::runtime_error("expected "+std::to_string(arrsz.size)+" items, got "+std::to_string(inFieldElem->n));
+    }
+    if (inFieldElem->t == Qt) { //no conversion required
+        buf.write(kG(inFieldElem), sizeof(Ct)*inFieldElem->n);
+    } else {
+        for (size_t i=0; i<inFieldElem->n; ++i) {
+            Ct val = getElemFromK<Ct>(inFieldElem, i);
+            buf.write((uint8_t*)&val, sizeof(Ct));
+        }
+    }
+    return buf;
+}
+
+template<typename Ct>
+Buffer &unparseArrayElement(Buffer &buf, K arr, J index) {
+    if (index > arr->n) {
+        throw std::runtime_error("array index out of bounds ("+std::to_string(index)+">"+std::to_string(arr->n)+")");
+    }
+    Ct val = getElemFromK<Ct>(arr, index);
+    buf.write((uint8_t*)&val, sizeof(Ct));
+    return buf;
+}
+
+Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex);
+
+struct caseDesc {
+    //int8_t caseFieldType;
+    uint32_t caseFieldIndex;
+    bool hasDefault;
+    uint8_t defaultRec;
+    std::map<uint32_t, uint8_t> caseToRec;
+};
+
+caseDesc readCaseDesc(char *&recschema, bool hasDefault) {
+    caseDesc result;
+    //result.caseFieldType = *recschema;
+    ++recschema;
+    result.caseFieldIndex = *(uint32_t*)recschema;
+    recschema += 4;
+    result.defaultRec = 0;
+    result.hasDefault = hasDefault;
+    if(hasDefault) {
+        result.defaultRec = *recschema;
+        ++recschema;
+    }
+    uint32_t caseCount = *(uint32_t*)recschema;
+    recschema += 4;
+    for (uint32_t i=0; i<caseCount; ++i) {
+        uint32_t caseValue = *(uint32_t*)recschema;
+        uint8_t caseRec = *(recschema+4);
+        result.caseToRec[caseValue] = caseRec;
+        recschema += 5;
+    }
+    return result;
+}
+
+Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inFieldElem, size_t schemaindex) {
+    arraySizeResult arrsz = readArraySizeFromSchema(recschema);
+    K fieldLabels = kK(kK(schema)[1])[schemaindex];
+    size_t fieldCount = fieldLabels->n;
+    char *innerRecschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
+    if (inFieldElem->t == 0) {  //non-collapsed records
+        J elemCount = inFieldElem->n;
+        if (arrsz.constantSize && arrsz.size != elemCount) {
+            throw std::runtime_error("expected "+std::to_string(arrsz.size)+" items, got "+std::to_string(elemCount));
+        }
+        for (size_t i=0; i<elemCount; ++i) {
+            unparseRecord(buf, schema, kK(inFieldElem)[i], schemaindex);
+        }
+    } else if (inFieldElem->t == XT) {  //collapsed records
+        K dict = inFieldElem->k;
+        if (dict->t != XD)
+            throw std::runtime_error("unparseArrayOfRecords unexpected value in table, type "+std::to_string(dict->t));
+        K keys = kK(dict)[0];
+        K values = kK(dict)[1];
+        if (keys->t != KS)
+            throw std::runtime_error("unparseArrayOfRecords unexpected type in columns, type "+std::to_string(keys->t));
+        if (values->t != 0)
+            throw std::runtime_error("unparseArrayOfRecords unexpected type in values, type "+std::to_string(values->t));
+
+        if (fieldCount < 1)
+            throw std::runtime_error("unparseArrayOfRecords no fields in record?!");
+
+        K firstField = kK(values)[0];
+        J elemCount = firstField->n;
+
+        if (arrsz.constantSize && arrsz.size != firstField->n) {
+            throw std::runtime_error("expected "+std::to_string(arrsz.size)+" items, got "+std::to_string(firstField->n));
+        }
+        std::vector<int> fieldPos(fieldCount);
+        for (size_t i=0; i<fieldCount; ++i) {
+            S fieldName = kS(fieldLabels)[i];
+            bool found = false;
+            for (size_t j=i; i<keys->n; ++j) {
+                if (fieldName == kS(keys)[j]) {
+                    fieldPos[i] = j;
+                    found = true;
+                    break;
+                }
+                if (!found) {
+                    throw std::runtime_error("missing field: "+std::string(fieldName));
+                }
+            }
+        }
+        for (size_t i=0; i<elemCount; ++i) {
+            char *innerRecschema2 = innerRecschema;
+            for (size_t j=0; j<fieldCount; ++j) {
+                K fieldArr = kK(values)[fieldPos[j]];
+                char fieldType = *innerRecschema2;
+                ++innerRecschema2;
+                try {
+                    switch(fieldType) {
+                    case -4:
+                        unparseArrayElement<uint8_t>(buf,fieldArr,i);
+                        break;
+                    case -5:
+                        unparseArrayElement<int16_t>(buf,fieldArr,i);
+                        break;
+                    case -6:
+                        unparseArrayElement<int32_t>(buf,fieldArr,i);
+                        break;
+                    case -7:
+                        unparseArrayElement<int64_t>(buf,fieldArr,i);
+                        break;
+                    case -8:
+                        unparseArrayElement<float>(buf,fieldArr,i);
+                        break;
+                    case -9:
+                        unparseArrayElement<double>(buf,fieldArr,i);
+                        break;
+                    case -128:{
+                        char ext = *innerRecschema2;
+                        ++innerRecschema2;
+                        if (ext==1 || ext==2) {
+                            caseDesc cd = readCaseDesc(innerRecschema2, ext==2);
+                            uint32_t caseFieldVal = getElemFromK<uint32_t>(kK(values)[fieldPos[cd.caseFieldIndex]], i);
+                            size_t innerSchemaIndex = 0;
+                            auto cur = cd.caseToRec.find(caseFieldVal);
+                            if (cur == cd.caseToRec.end()) {
+                                if (cd.hasDefault)
+                                    innerSchemaIndex = cd.defaultRec;
+                                else
+                                    throw std::runtime_error("invalid case value "+std::to_string(caseFieldVal));
+                            } else
+                                innerSchemaIndex = cur->second;
+                            unparseRecord(buf, schema, kK(fieldArr)[i], innerSchemaIndex);
+                        } else {
+                            throw std::runtime_error("unparseArrayOfRecords NYI extended field type "+std::to_string(ext));
+                        }
+                        break;
+                    }
+                    default:
+                        throw std::runtime_error("unparseArrayOfRecords NYI field type "+std::to_string(fieldType));
+                    }
+                } catch(const std::exception &e) {
+                    throw std::runtime_error("["+std::to_string(i)+"]"+"."+kS(fieldLabels)[j]+": "+e.what());
+                }
+            }
+        }
+    } else {
+        throw std::runtime_error("unparseArrayOfRecords can't handle type "+std::to_string(inFieldElem->t));
+    }
+    return buf;
+}
+
+Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
+    if (input->t != 99) {
+        throw std::runtime_error(std::string()+kS(kK(schema)[0])[schemaindex]+": input is not a dictionary");
+    }
+    K inputKey = kK(input)[0];
+    K inputVal = kK(input)[1];
+    size_t valFieldCount = inputVal->n;
+    K fieldLabels = kK(kK(schema)[1])[schemaindex];
+    size_t fieldCount = fieldLabels->n;
+    char *recschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
+    K inFieldElem = 0;
+    for (size_t i=0; i<fieldCount; ++i) {
+        size_t j;
+        S fieldName = kS(fieldLabels)[i];
+        for (j=0; j<valFieldCount; ++j) {
+            if (kS(inputKey)[j] == fieldName) break;
+        }
+        if (j == valFieldCount) throw std::runtime_error(std::string("can't find field ")+kS(inputKey)[i]);
+        char fieldType = *recschema;
+        ++recschema;
+        char fieldExtType = 0;
+        if (fieldType == -128) {
+            fieldExtType = *recschema;
+            ++recschema;
+        }
+        try {
+            if (fieldType>0 || (fieldType == -128 && fieldExtType == 5)) {
+                if (inputVal->t != 0) {
+                    throw std::runtime_error("can't populate array field - record value is a simple list");
+                }
+                inFieldElem = kK(inputVal)[i];
+            }
+            if (fieldType>=20) {
+                unparseArrayOfRecords(buf, recschema, schema, inFieldElem, fieldType-20);
+            } else switch(fieldType) {
+            case -4:{
+                unparseArrayElement<uint8_t>(buf, inputVal, j);
+                break;
+            }
+            case -5:{
+                unparseArrayElement<int16_t>(buf, inputVal, j);
+                break;
+            }
+            case -6:{
+                unparseArrayElement<int32_t>(buf, inputVal, j);
+                break;
+            }
+            case -7:{
+                unparseArrayElement<int64_t>(buf, inputVal, j);
+                break;
+            }
+            case -8:{
+                float out = getRealFromK(inputVal, j);
+                buf.write(out);
+                break;
+            }
+            case 5:{
+                unparseArray<int16_t,5>(buf, recschema, inFieldElem);
+                break;
+            }
+            case 6:{
+                unparseArray<int32_t,6>(buf, recschema, inFieldElem);
+                break;
+            }
+            case -128:{
+                switch(fieldExtType) {
+                case 3:{
+                    uint16_t out = flipEndian(getElemFromK<uint16_t>(inputVal, j));
+                    buf.write(out);
+                    break;
+                }
+                case 4:{
+                    uint32_t out = flipEndian(getElemFromK<uint32_t>(inputVal, j));
+                    buf.write(out);
+                    break;
+                }
+                case 5:{
+                    arraySizeResult arrsz = readArraySizeFromSchemaWithPartial(recschema, inputVal);
+                    Buffer tmpbuf;
+                    char innerFieldType = *recschema;
+                    ++recschema;
+                    //char innerFieldExtType = 0;
+                    if (innerFieldType == -128) {
+                        //innerFieldExtType = *recschema;
+                        ++recschema;
+                    }
+                    if (innerFieldType>=20) {
+                        unparseArrayOfRecords(tmpbuf, recschema, schema, inFieldElem, innerFieldType-20);
+                    } else switch(innerFieldType) {
+                    default:
+                        throw std::runtime_error("unparseRecord NYI field type in parsedArray: "+std::to_string(innerFieldType));
+                    }
+                    size_t innerSize = tmpbuf.size();
+                    if (arrsz.size<innerSize) {
+                        throw std::runtime_error("can't fit parsed data: max("+std::to_string(arrsz.size)+")<actual("+std::to_string(innerSize)+")");
+                    } else if (arrsz.size>innerSize) {
+                        tmpbuf.writeFiller(arrsz.size-innerSize);
+                    }
+                    buf.write(tmpbuf);
+                    break;
+                }
+                case 6:{
+                    uint32_t val = getElemFromK<uint32_t>(inputVal, j);
+                    while (val>=0x80) {
+                        uint8_t b = (val & 0x7f) | 0x80;
+                        buf.write(b);
+                        val >>= 7;
+                    }
+                    buf.write((uint8_t)val);
+                    break;
+                }
+                case 7:{
+                    unparseArrayElement<uint16_t>(buf, inputVal, j);
+                    break;
+                }
+                case 8:{
+                    unparseArrayElement<uint32_t>(buf, inputVal, j);
+                    break;
+                }
+                default:
+                    throw std::runtime_error("unparseRecord NYI extended field type "+std::to_string(fieldExtType));
+                }
+                break;
+            }
+            default:
+                throw std::runtime_error("unparseRecord NYI field type "+std::to_string(fieldType));
+            }
+        } catch(const std::exception &e) {
+            throw std::runtime_error(std::string(kS(kK(schema)[0])[schemaindex])+"."+fieldName+": "+e.what());
+        }
+    }
+    return buf;
+}
+
+//API
+
+extern "C" {
+
 K k_binparse_parse(K schema, K input, K mainType) {
     if (schema->t != 0) { return kerror("parse: schema must be general list"); }
     if (input->t != 4) { return kerror("parse: data must be bytelist"); }
@@ -591,6 +1093,7 @@ K k_binparse_parse(K schema, K input, K mainType) {
 }
 
 K k_binparse_parseRepeat(K schema, K input, K mainType) {
+    if (schema->t != 0) { return kerror("parse: schema must be general list"); }
     if (input->t != 4) { return kerror("parse: data must be bytelist"); }
     if (mainType->t != -11) { return kerror("parse: main type must be a symbol"); }
     char *ptr = (char*)kG(input);
@@ -606,8 +1109,24 @@ K k_binparse_parseRepeat(K schema, K input, K mainType) {
     return kerror("main type not found in schema");
 }
 
+K k_binparse_unparse(K schema, K input, K mainType) {
+    if (mainType->t != -11) { return kerror("unparse: main type must be a symbol"); }
+    if (schema->t != 0) { return kerror("unparse: schema must be general list"); }
+    for (size_t i=0; i<kK(schema)[0]->n; ++i) {
+        if (kS(kK(schema)[0])[i] == mainType->s) {
+            Buffer buf;
+            try {
+                unparseRecord(buf, schema, input, i);
+            } catch(const std::exception &e) {
+                return kerror(e.what());
+            }
+            long size = buf.size();
+            K result = ktn(KG,size);
+            memcpy(kC(result), buf.data(), size);
+            return result;
+        }
+    }
+    return kerror("main type not found in schema");
 }
-/*
-lib:`$":D:/Projects/c++/qutils/qbinparse";
-.binp.parse:lib 2:(`k_binparse_parse;1)
-*/
+
+}
