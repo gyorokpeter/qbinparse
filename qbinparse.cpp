@@ -678,51 +678,6 @@ public:
     const uint8_t *data() const { return data_; }
 };
 
-uint8_t getByteFromK(K k, size_t index) {
-    switch(k->t) {
-        case 4:
-            return kG(k)[index];
-        default:
-            throw std::runtime_error("can't convert type "+std::to_string(k->t)+" to byte");
-    }
-}
-
-int16_t getShortFromK(K k, size_t index) {
-    switch(k->t) {
-        case 0: {
-            K elem = kK(k)[index];
-            switch(elem->t) {
-            case -5:
-                return elem->h;
-            default:
-                throw std::runtime_error("can't convert type "+std::to_string(elem->t)+" to short");
-            }
-        }
-        case 5:
-            return kH(k)[index];
-        default:
-            throw std::runtime_error("can't convert type "+std::to_string(k->t)+" to short");
-    }
-}
-
-float getRealFromK(K k, size_t index) {
-    switch(k->t) {
-        case 0: {
-            K elem = kK(k)[index];
-            switch(elem->t) {
-            case -8:
-                return elem->e;
-            default:
-                throw std::runtime_error("can't convert type "+std::to_string(elem->t)+" to real");
-            }
-        }
-        case 8:
-            return kE(k)[index];
-        default:
-            throw std::runtime_error("can't convert type "+std::to_string(k->t)+" to real");
-    }
-}
-
 template<typename Ct>
 Ct getElemFromK(K k, size_t index) {
     switch(k->t) {
@@ -741,6 +696,8 @@ Ct getElemFromK(K k, size_t index) {
                 return elem->e;
             case -9:
                 return elem->f;
+            case -10:
+                return elem->g;
             default:
                 throw std::runtime_error("getElemFromK can't read type "+std::to_string(elem->t)+" from general list");
             }
@@ -757,6 +714,8 @@ Ct getElemFromK(K k, size_t index) {
             return kE(k)[index];
         case 9:
             return kF(k)[index];
+        case 10:
+            return kC(k)[index];
         default:
             throw std::runtime_error("getElemFromK can't read type "+std::to_string(k->t)+" from simple list");
     }
@@ -896,6 +855,9 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
                     case -9:
                         unparseArrayElement<double>(buf,fieldArr,i);
                         break;
+                    case -10:
+                        unparseArrayElement<char>(buf,fieldArr,i);
+                        break;
                     case -128:{
                         char ext = *innerRecschema2;
                         ++innerRecschema2;
@@ -983,8 +945,19 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
                 break;
             }
             case -8:{
-                float out = getRealFromK(inputVal, j);
-                buf.write(out);
+                unparseArrayElement<float>(buf, inputVal, j);
+                break;
+            }
+            case -9:{
+                unparseArrayElement<double>(buf, inputVal, j);
+                break;
+            }
+            case -10:{
+                unparseArrayElement<char>(buf, inputVal, j);
+                break;
+            }
+            case 4:{
+                unparseArray<uint8_t,4>(buf, recschema, inFieldElem);
                 break;
             }
             case 5:{
@@ -993,6 +966,22 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
             }
             case 6:{
                 unparseArray<int32_t,6>(buf, recschema, inFieldElem);
+                break;
+            }
+            case 7:{
+                unparseArray<int64_t,7>(buf, recschema, inFieldElem);
+                break;
+            }
+            case 8:{
+                unparseArray<float,8>(buf, recschema, inFieldElem);
+                break;
+            }
+            case 9:{
+                unparseArray<double,9>(buf, recschema, inFieldElem);
+                break;
+            }
+            case 10:{
+                unparseArray<char,10>(buf, recschema, inFieldElem);
                 break;
             }
             case -128:{

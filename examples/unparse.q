@@ -36,16 +36,20 @@ simpleArray:.binp.compileSchema"
     end
     ";
 if[not .binp.unparse[simpleArray;enlist[`ints]!enlist 1 2 3 4i;`a]~0x01000000020000000300000004000000;'"failed"];
+if[not .binp.unparse[simpleArray;enlist[`ints]!enlist"abcd";`a]~0x61000000620000006300000064000000;'"failed"];
 
 if[not .[.binp.unparse;(simpleArray;enlist[`ints]!enlist 1 2 3 4 5i;`a);::]~"a.ints: expected 4 items, got 5";'"failed"];
 
-twoSimpleArrays:.binp.compileSchema"
+multipleSimpleArrays:.binp.compileSchema"
     record a
         field ints array int x 4
         field shorts array short x 5
+        field bytes array byte x 4
+        field chars array char x 4
     end
     ";
-if[not .binp.unparse[twoSimpleArrays;`ints`shorts!(1 2 3 4i;5 6 7 8 9h);`a]~0x0100000002000000030000000400000005000600070008000900; '"failed"];
+if[not .binp.unparse[multipleSimpleArrays;`ints`shorts`bytes`chars!(1 2 3 4i;5 6 7 8 9h;10 11 12 13;14 15 16 17);`a]~
+    0x01000000020000000300000004000000050006000700080009000a0b0c0d0e0f1011; '"failed"];
 
 varLengthArray:.binp.compileSchema"
     record a
