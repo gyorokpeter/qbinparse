@@ -176,6 +176,26 @@ if[not .binp.parse[recordWithCaseDefault;0x000100000038020000030000004f040002;`m
     `tag`data!(0x4f;enlist[`contShort]!enlist 4h))
     ;0x02); '"failed"];
 
+recordWithCase3:.binp.compileSchema"
+    record caseNo
+    end
+
+    record caseYes
+        field cont array byte x 4
+    end
+
+    record main
+        field tag int
+        field data
+            case tag
+                0       caseNo
+                default caseYes
+            end
+    end
+    ";
+if[not .binp.parse[recordWithCase3;0x0100000002020202;`main]~`tag`data!(1i;enlist[`cont]!enlist 0x02020202);'"failed"];
+if[not .binp.parse[recordWithCase3;0x00000000;`main]~`tag`data!(0i;(`$())!());'"failed"];
+
 bigEndian:.binp.compileSchema"
     record main
         field f1 be short

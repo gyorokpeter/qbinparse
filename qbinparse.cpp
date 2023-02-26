@@ -833,9 +833,18 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
             char *innerRecschema2 = innerRecschema;
             for (size_t j=0; j<fieldCount; ++j) {
                 K fieldArr = kK(values)[fieldPos[j]];
+                K inFieldElem = 0;
                 char fieldType = *innerRecschema2;
                 ++innerRecschema2;
-                try {
+                if ((fieldType<=-20 && fieldType > -128) || fieldType>0) {
+                    if (fieldArr->t != 0) {
+                        throw std::runtime_error("can't populate array field - record value is a simple list");
+                    }
+                    inFieldElem = kK(fieldArr)[i];
+                }
+                if (fieldType<=-20 && fieldType > -128) {
+                    unparseRecord(buf, schema, inFieldElem, (-fieldType)-20);
+                } else try {
                     switch(fieldType) {
                     case -4:
                         unparseArrayElement<uint8_t>(buf,fieldArr,i);
@@ -857,6 +866,9 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
                         break;
                     case -10:
                         unparseArrayElement<char>(buf,fieldArr,i);
+                        break;
+                    case 4:
+                        unparseArray<uint8_t,4>(buf, innerRecschema2, inFieldElem);
                         break;
                     case -128:{
                         char ext = *innerRecschema2;
@@ -899,18 +911,28 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
     }
     K inputKey = kK(input)[0];
     K inputVal = kK(input)[1];
-    size_t valFieldCount = inputVal->n;
     K fieldLabels = kK(kK(schema)[1])[schemaindex];
     size_t fieldCount = fieldLabels->n;
     char *recschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
     K inFieldElem = 0;
+    std::vector<int> fieldPos(fieldCount);
     for (size_t i=0; i<fieldCount; ++i) {
-        size_t j;
         S fieldName = kS(fieldLabels)[i];
-        for (j=0; j<valFieldCount; ++j) {
-            if (kS(inputKey)[j] == fieldName) break;
+        bool found = false;
+        for (size_t j=0; j<inputKey->n; ++j) {
+            if (fieldName == kS(inputKey)[j]) {
+                fieldPos[i] = j;
+                found = true;
+                break;
+            }
         }
-        if (j == valFieldCount) throw std::runtime_error(std::string("can't find field ")+kS(inputKey)[i]);
+        if (!found) {
+            throw std::runtime_error("missing field: "+std::string(fieldName));
+        }
+    }
+    for (size_t i=0; i<fieldCount; ++i) {
+        size_t j = fieldPos[i];
+        S fieldName = kS(fieldLabels)[i];
         char fieldType = *recschema;
         ++recschema;
         char fieldExtType = 0;
@@ -919,7 +941,7 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
             ++recschema;
         }
         try {
-            if (fieldType>0 || (fieldType == -128 && fieldExtType == 5)) {
+            if (fieldType>0 || (fieldType == -128 && (fieldExtType == 1 || fieldExtType == 2 || fieldExtType == 5))) {
                 if (inputVal->t != 0) {
                     throw std::runtime_error("can't populate array field - record value is a simple list");
                 }
@@ -986,6 +1008,22 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
             }
             case -128:{
                 switch(fieldExtType) {
+                case 1:
+                case 2:{
+                    caseDesc cd = readCaseDesc(recschema, fieldExtType==2);
+                    uint32_t caseFieldVal = getElemFromK<int32_t>(inputVal, fieldPos[cd.caseFieldIndex]);
+                    size_t innerSchemaIndex = 0;
+                    auto cur = cd.caseToRec.find(caseFieldVal);
+                    if (cur == cd.caseToRec.end()) {
+                        if (cd.hasDefault)
+                            innerSchemaIndex = cd.defaultRec;
+                        else
+                            throw std::runtime_error("invalid case value "+std::to_string(caseFieldVal));
+                    } else
+                        innerSchemaIndex = cur->second;
+                    unparseRecord(buf, schema, inFieldElem, innerSchemaIndex);
+                    break;
+                }
                 case 3:{
                     uint16_t out = flipEndian(getElemFromK<uint16_t>(inputVal, j));
                     buf.write(out);

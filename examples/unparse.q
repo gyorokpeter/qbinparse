@@ -13,6 +13,7 @@ simpleRecordByte:.binp.compileSchema"
     ";
 if[not .binp.unparse[simpleRecordByte;`ypos`xpos!(0x0201);`point]~0x0102;'"failed"];
 if[not .binp.unparse[simpleRecordByte;`xpos`ypos!(0x0102);`point]~0x0102;'"failed"];
+if[not .[.binp.unparse;(simpleRecordByte;enlist[`xpos]!enlist 0x02;`point);::]~"missing field: ypos"];
 
 simpleRecord:.binp.compileSchema"
     record point
@@ -50,6 +51,21 @@ multipleSimpleArrays:.binp.compileSchema"
     ";
 if[not .binp.unparse[multipleSimpleArrays;`ints`shorts`bytes`chars!(1 2 3 4i;5 6 7 8 9h;10 11 12 13;14 15 16 17);`a]~
     0x01000000020000000300000004000000050006000700080009000a0b0c0d0e0f1011; '"failed"];
+
+arrayOfRecord:.binp.compileSchema"
+    record c
+        field num int
+    end
+    record b
+        field cnt array byte x 2
+        field cnt2 record c
+    end
+    record a
+        field bs array record b x 2
+    end
+    ";
+if[not .binp.unparse[arrayOfRecord;enlist[`bs]!enlist([]cnt:(0x0102;0x0304);cnt2:([]num:5 6));`a]
+    ~0x010205000000030406000000; '"failed"];
 
 varLengthArray:.binp.compileSchema"
     record a
@@ -209,13 +225,32 @@ if[not .binp.unparse[recordWithCaseDefault;
     `tag`data!(0x4f;enlist[`contShort]!enlist 4h))
     ;0x02);`main]~(0x000100000038020000030000004f040002);'"failed"];
 
+recordWithCase3:.binp.compileSchema"
+    record caseNo
+    end
+
+    record caseYes
+        field cont array byte x 4
+    end
+
+    record main
+        field tag int
+        field data
+            case tag
+                0       caseNo
+                default caseYes
+            end
+    end
+    ";
+if[not .binp.unparse[recordWithCase3;`tag`data!(1i;enlist[`cont]!enlist 0x02020202);`main]~0x0100000002020202;'"failed"];
+if[not .binp.unparse[recordWithCase3;`tag`data!(0i;(`$())!());`main]~0x00000000;'"failed"];
+
 bigEndian:.binp.compileSchema"
     record main
         field f1 be short
         field f2 be int
     end
     ";
-
 if[not .binp.unparse[bigEndian;`f1`f2!(1h;1i);`main]~0x000100000001;'"failed"];
 
 repeatingAtom:.binp.compileSchema"
