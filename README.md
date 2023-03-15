@@ -91,3 +91,12 @@ schema:.binp.compileSchema schemaStr;
 Returns: ``` `length`str!(6h;"Hello") ```
 
 See also [examples/parse.q](examples/parse.q) for parsing and [examples/unparse.q](examples/unparse.q) for unparsing.
+
+## Error handling
+Parsing failures don't throw errors but instead return a partial object with the error inserted into the value of the problematic field as a symbol. Possible errors include:
+* `endOfBuffer`: attempt to read a field when the read position is already at the end of the input
+* `arrayRunsPastInput`: an array has a size that would make it cover data past the end of the input
+* `tooLargeArray`: the array size wouldn't fit into 32 bits
+* `noCaseMatch`: a `case` field encountered an input value that is not among the cases and there is no `default` case
+
+Furthermore if there are extra bytes left over after parsing the main record, the leftover bytes are added to the record with a field named `xxxRemainingData`. This is also considered a type of error and in particular the `.binp.unparse` function will ignore this field. To describe a format that allows garbage/padding/irrelevant data at the end, use an `array byte repeat` field as the last field to capture all the remaining bytes.
