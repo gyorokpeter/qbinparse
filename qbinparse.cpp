@@ -873,7 +873,9 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
                     case -128:{
                         char ext = *innerRecschema2;
                         ++innerRecschema2;
-                        if (ext==1 || ext==2) {
+                        switch(ext) {
+                        case 1:
+                        case 2:{
                             caseDesc cd = readCaseDesc(innerRecschema2, ext==2);
                             uint32_t caseFieldVal = getElemFromK<uint32_t>(kK(values)[fieldPos[cd.caseFieldIndex]], i);
                             size_t innerSchemaIndex = 0;
@@ -886,7 +888,15 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
                             } else
                                 innerSchemaIndex = cur->second;
                             unparseRecord(buf, schema, kK(fieldArr)[i], innerSchemaIndex);
-                        } else {
+                            break;
+                        }
+                        case 7:
+                            unparseArrayElement<int16_t>(buf,fieldArr,i);
+                            break;
+                        case 8:
+                            unparseArrayElement<int32_t>(buf,fieldArr,i);
+                            break;
+                        default:
                             throw std::runtime_error("unparseArrayOfRecords NYI extended field type "+std::to_string(ext));
                         }
                         break;

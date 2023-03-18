@@ -324,3 +324,14 @@ unsigned:.binp.compileSchema"
     end
     ";
 if[not .binp.parse[unsigned; 0xffffffffffffffffffffffff;`main]~`f1`f2`f3`f4!(-1i;-1h;4294967295j;65535i); '"failed"];
+
+unsignedArr:.binp.compileSchema"
+    record r
+        field f1 uint
+        field f2 ushort
+    end
+    record main
+        field f array record r x 2
+    end
+    ";
+if[not .binp.parse[unsignedArr; 0xffffffffffffffffffffffff;`main]~enlist[`f]!enlist([]f1:2#4294967295;f2:2#65535i); '"failed"];
