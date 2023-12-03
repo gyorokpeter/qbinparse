@@ -473,15 +473,16 @@ K parseCase(K schema, char *&ptr, char *end, char *&recschema, bool hasDefault,
     return parseRecord(schema, ptr, end, caseRec);
 }
 
-K parseField(K schema, char *&ptr, char *end, char *&recschema, K partialResult);
+K parseField(K schema, char *&ptr, char *start, char *&end, char *&recschema, K partialResult);
 
 K parseInterpretedArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult) {
     arraySizeResult as = readArraySize(ptr, end, recschema, partialResult);
     if (as.status == arraySizeResult::badSizeSpec) return ksym("invalidArraySizeSpecifier");
+    char *tmpStart = ptr;
     char *tmpPtr = ptr;
     char *tmpEnd = ptr+as.size;
     if (as.status == arraySizeResult::endOfBuffer) tmpEnd = ptr;
-    K result = parseField(schema, tmpPtr, tmpEnd, recschema, partialResult);
+    K result = parseField(schema, tmpPtr, tmpStart, tmpEnd, recschema, partialResult);
     ptr = tmpEnd;
     return result;
 }
@@ -511,9 +512,19 @@ K parseExtType(K schema, char *&ptr, char *end, char *&recschema, K partialResul
     }
 }
 
-K parseField(K schema, char *&ptr, char *end, char *&recschema, K partialResult) {
+K parseField(K schema, char *&ptr, char *start, char *&end, char *&recschema, K partialResult) {
     char fieldType = *recschema;
     ++recschema;
+    bool isRecSize = false;
+    while (fieldType == 127) {
+        char op = *recschema;
+        ++recschema;
+        if (op == 1) {
+            isRecSize = true;
+        }
+        fieldType = *recschema;
+        ++recschema;
+    }
     if (fieldType == -128) {
         return parseExtType(schema, ptr, end, recschema, partialResult);
     } else if (fieldType <= -20) {
@@ -521,18 +532,30 @@ K parseField(K schema, char *&ptr, char *end, char *&recschema, K partialResult)
     } else if (fieldType > 0) {
         return parseArray(schema, ptr, end, recschema, partialResult, -fieldType);
     } else switch(fieldType) {
-    case -4:
-        return kg(readByte(ptr));
+    case -4:{
+        G val = readByte(ptr);
+        if (isRecSize) end = start+val;
+        return kg(val);
         break;
-    case -5:
-        return kh(readShort(ptr));
+    }
+    case -5:{
+        H val = readShort(ptr);
+        if (isRecSize) end = start+val;
+        return kh(val);
         break;
-    case -6:
-        return ki(readInt(ptr));
+    }
+    case -6:{
+        I val = readInt(ptr);
+        if (isRecSize) end = start+val;
+        return ki(val);
         break;
-    case -7:
-        return kj(readLong(ptr));
+    }
+    case -7:{
+        J val = readLong(ptr);
+        if (isRecSize) end = start+val;
+        return kj(val);
         break;
+    }
     case -8:
         return ke(readReal(ptr));
         break;
@@ -571,16 +594,20 @@ K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
                 case 6: nextType=-6; break;
             }
         }
+        if (nextType == 127) {
+            schemaScan+=2;
+        }
         if (nextType>=0 || nextType<=-20) { resultType = 0; break; }
         if (i > 0) {
             if (resultType != -nextType) { resultType = 0; break; }
         } else
             resultType = -nextType;
     }
+    char *start = ptr;
     K result = ktn(resultType, fieldCount);
     for (size_t i=0; i<fieldCount; ++i) {
         if (resultType == 0) {
-            kK(result)[i] = parseField(schema, ptr, end, recschema, result);
+            kK(result)[i] = parseField(schema, ptr, start, end, recschema, result);
         } else {
             char fieldType = *recschema;
             ++recschema;
@@ -781,11 +808,133 @@ caseDesc readCaseDesc(char *&recschema, bool hasDefault) {
     return result;
 }
 
+std::vector<int> matchFieldPos(K fieldLabels, K dict) {
+    K keys = kK(dict)[0];
+    if (keys->t != KS)
+        throw std::runtime_error("unexpected type in columns, type "+std::to_string(keys->t));
+    size_t fieldCount = fieldLabels->n;
+    if (fieldCount < 1)
+        throw std::runtime_error("no fields in record?!");
+    std::vector<int> fieldPos(fieldCount);
+    for (size_t i=0; i<fieldCount; ++i) {
+        S fieldName = kS(fieldLabels)[i];
+        bool found = false;
+        for (size_t j=i; i<keys->n; ++j) {
+            if (fieldName == kS(keys)[j]) {
+                fieldPos[i] = j;
+                found = true;
+                break;
+            }
+            if (!found) {
+                throw std::runtime_error("missing field: "+std::string(fieldName));
+            }
+        }
+    }
+    return fieldPos;
+}
+
+Buffer &unparseRecordFieldsFromTable(Buffer &buf, K schema, size_t schemaindex, K values, const std::vector<int> &fieldPos, J i) {
+    K fieldLabels = kK(kK(schema)[1])[schemaindex];
+    size_t fieldCount = fieldLabels->n;
+    char *recschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
+    for (size_t j=0; j<fieldCount; ++j) {
+        K fieldArr = kK(values)[fieldPos[j]];
+        K inFieldElem = 0;
+        char fieldType = *recschema;
+        ++recschema;
+        if ((fieldType<=-20 && fieldType > -128) || fieldType>0) {
+            if (fieldArr->t != 0) {
+                throw std::runtime_error("can't populate array field - record value is a simple list");
+            }
+            inFieldElem = kK(fieldArr)[i];
+        }
+        if (fieldType<=-20 && fieldType > -128) {
+            unparseRecord(buf, schema, inFieldElem, (-fieldType)-20);
+        } else try {
+            switch(fieldType) {
+            case -4:
+                unparseArrayElement<uint8_t>(buf,fieldArr,i);
+                break;
+            case -5:
+                unparseArrayElement<int16_t>(buf,fieldArr,i);
+                break;
+            case -6:
+                unparseArrayElement<int32_t>(buf,fieldArr,i);
+                break;
+            case -7:
+                unparseArrayElement<int64_t>(buf,fieldArr,i);
+                break;
+            case -8:
+                unparseArrayElement<float>(buf,fieldArr,i);
+                break;
+            case -9:
+                unparseArrayElement<double>(buf,fieldArr,i);
+                break;
+            case -10:
+                unparseArrayElement<char>(buf,fieldArr,i);
+                break;
+            case 4:
+                unparseArray<uint8_t,4>(buf, recschema, inFieldElem);
+                break;
+            case -128:{
+                char ext = *recschema;
+                ++recschema;
+                switch(ext) {
+                case 1:
+                case 2:{
+                    caseDesc cd = readCaseDesc(recschema, ext==2);
+                    uint32_t caseFieldVal = getElemFromK<uint32_t>(kK(values)[fieldPos[cd.caseFieldIndex]], i);
+                    size_t innerSchemaIndex = 0;
+                    auto cur = cd.caseToRec.find(caseFieldVal);
+                    if (cur == cd.caseToRec.end()) {
+                        if (cd.hasDefault)
+                            innerSchemaIndex = cd.defaultRec;
+                        else
+                            throw std::runtime_error("invalid case value "+std::to_string(caseFieldVal));
+                    } else
+                        innerSchemaIndex = cur->second;
+                    unparseRecord(buf, schema, kK(fieldArr)[i], innerSchemaIndex);
+                    break;
+                }
+                case 7:
+                    unparseArrayElement<int16_t>(buf,fieldArr,i);
+                    break;
+                case 8:
+                    unparseArrayElement<int32_t>(buf,fieldArr,i);
+                    break;
+                default:
+                    throw std::runtime_error("unparseArrayOfRecords NYI extended field type "+std::to_string(ext));
+                }
+                break;
+            }
+            default:
+                throw std::runtime_error("unparseArrayOfRecords NYI field type "+std::to_string(fieldType));
+            }
+        } catch(const std::exception &e) {
+            throw std::runtime_error("["+std::to_string(i)+"]"+"."+kS(fieldLabels)[j]+": "+e.what());
+        }
+    }
+    return buf;
+}
+
+
+Buffer &unparseRecordFromTableRow(Buffer &buf, K schema, K table, J index, size_t schemaindex) {
+    K fieldLabels = kK(kK(schema)[1])[schemaindex];
+    K dict = table->k;
+    if (dict->t != XD)
+        throw std::runtime_error("unparseRecordFromTableRow unexpected value in table, type "+std::to_string(dict->t));
+    K values = kK(dict)[1];
+    if (values->t != 0)
+        throw std::runtime_error("unparseRecordFromTableRow unexpected type in values, type "+std::to_string(values->t));
+
+    std::vector<int> fieldPos = matchFieldPos(fieldLabels, dict);
+    unparseRecordFieldsFromTable(buf, schema, schemaindex, values, fieldPos, index);
+    return buf;
+}
+
 Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inFieldElem, size_t schemaindex) {
     arraySizeResult arrsz = readArraySizeFromSchema(recschema);
     K fieldLabels = kK(kK(schema)[1])[schemaindex];
-    size_t fieldCount = fieldLabels->n;
-    char *innerRecschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
     if (inFieldElem->t == 0) {  //non-collapsed records
         J elemCount = inFieldElem->n;
         if (arrsz.constantSize && arrsz.size != elemCount) {
@@ -798,15 +947,9 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
         K dict = inFieldElem->k;
         if (dict->t != XD)
             throw std::runtime_error("unparseArrayOfRecords unexpected value in table, type "+std::to_string(dict->t));
-        K keys = kK(dict)[0];
         K values = kK(dict)[1];
-        if (keys->t != KS)
-            throw std::runtime_error("unparseArrayOfRecords unexpected type in columns, type "+std::to_string(keys->t));
         if (values->t != 0)
             throw std::runtime_error("unparseArrayOfRecords unexpected type in values, type "+std::to_string(values->t));
-
-        if (fieldCount < 1)
-            throw std::runtime_error("unparseArrayOfRecords no fields in record?!");
 
         K firstField = kK(values)[0];
         J elemCount = firstField->n;
@@ -814,100 +957,9 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
         if (arrsz.constantSize && arrsz.size != firstField->n) {
             throw std::runtime_error("expected "+std::to_string(arrsz.size)+" items, got "+std::to_string(firstField->n));
         }
-        std::vector<int> fieldPos(fieldCount);
-        for (size_t i=0; i<fieldCount; ++i) {
-            S fieldName = kS(fieldLabels)[i];
-            bool found = false;
-            for (size_t j=i; i<keys->n; ++j) {
-                if (fieldName == kS(keys)[j]) {
-                    fieldPos[i] = j;
-                    found = true;
-                    break;
-                }
-                if (!found) {
-                    throw std::runtime_error("missing field: "+std::string(fieldName));
-                }
-            }
-        }
+        std::vector<int> fieldPos = matchFieldPos(fieldLabels, dict);
         for (size_t i=0; i<elemCount; ++i) {
-            char *innerRecschema2 = innerRecschema;
-            for (size_t j=0; j<fieldCount; ++j) {
-                K fieldArr = kK(values)[fieldPos[j]];
-                K inFieldElem = 0;
-                char fieldType = *innerRecschema2;
-                ++innerRecschema2;
-                if ((fieldType<=-20 && fieldType > -128) || fieldType>0) {
-                    if (fieldArr->t != 0) {
-                        throw std::runtime_error("can't populate array field - record value is a simple list");
-                    }
-                    inFieldElem = kK(fieldArr)[i];
-                }
-                if (fieldType<=-20 && fieldType > -128) {
-                    unparseRecord(buf, schema, inFieldElem, (-fieldType)-20);
-                } else try {
-                    switch(fieldType) {
-                    case -4:
-                        unparseArrayElement<uint8_t>(buf,fieldArr,i);
-                        break;
-                    case -5:
-                        unparseArrayElement<int16_t>(buf,fieldArr,i);
-                        break;
-                    case -6:
-                        unparseArrayElement<int32_t>(buf,fieldArr,i);
-                        break;
-                    case -7:
-                        unparseArrayElement<int64_t>(buf,fieldArr,i);
-                        break;
-                    case -8:
-                        unparseArrayElement<float>(buf,fieldArr,i);
-                        break;
-                    case -9:
-                        unparseArrayElement<double>(buf,fieldArr,i);
-                        break;
-                    case -10:
-                        unparseArrayElement<char>(buf,fieldArr,i);
-                        break;
-                    case 4:
-                        unparseArray<uint8_t,4>(buf, innerRecschema2, inFieldElem);
-                        break;
-                    case -128:{
-                        char ext = *innerRecschema2;
-                        ++innerRecschema2;
-                        switch(ext) {
-                        case 1:
-                        case 2:{
-                            caseDesc cd = readCaseDesc(innerRecschema2, ext==2);
-                            uint32_t caseFieldVal = getElemFromK<uint32_t>(kK(values)[fieldPos[cd.caseFieldIndex]], i);
-                            size_t innerSchemaIndex = 0;
-                            auto cur = cd.caseToRec.find(caseFieldVal);
-                            if (cur == cd.caseToRec.end()) {
-                                if (cd.hasDefault)
-                                    innerSchemaIndex = cd.defaultRec;
-                                else
-                                    throw std::runtime_error("invalid case value "+std::to_string(caseFieldVal));
-                            } else
-                                innerSchemaIndex = cur->second;
-                            unparseRecord(buf, schema, kK(fieldArr)[i], innerSchemaIndex);
-                            break;
-                        }
-                        case 7:
-                            unparseArrayElement<int16_t>(buf,fieldArr,i);
-                            break;
-                        case 8:
-                            unparseArrayElement<int32_t>(buf,fieldArr,i);
-                            break;
-                        default:
-                            throw std::runtime_error("unparseArrayOfRecords NYI extended field type "+std::to_string(ext));
-                        }
-                        break;
-                    }
-                    default:
-                        throw std::runtime_error("unparseArrayOfRecords NYI field type "+std::to_string(fieldType));
-                    }
-                } catch(const std::exception &e) {
-                    throw std::runtime_error("["+std::to_string(i)+"]"+"."+kS(fieldLabels)[j]+": "+e.what());
-                }
-            }
+            unparseRecordFieldsFromTable(buf, schema, schemaindex, values, fieldPos, i);
         }
     } else {
         throw std::runtime_error("unparseArrayOfRecords can't handle type "+std::to_string(inFieldElem->t));
@@ -917,7 +969,7 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
 
 Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
     if (input->t != 99) {
-        throw std::runtime_error(std::string()+kS(kK(schema)[0])[schemaindex]+": input is not a dictionary");
+        throw std::runtime_error(std::string()+kS(kK(schema)[0])[schemaindex]+": input is not a dictionary (found type "+std::to_string(input->t)+")");
     }
     K inputKey = kK(input)[0];
     K inputVal = kK(input)[1];
@@ -945,6 +997,11 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
         S fieldName = kS(fieldLabels)[i];
         char fieldType = *recschema;
         ++recschema;
+        while(fieldType == 127) {
+            ++recschema;
+            fieldType = *recschema;
+            ++recschema;
+        }
         char fieldExtType = 0;
         if (fieldType == -128) {
             fieldExtType = *recschema;
@@ -957,8 +1014,19 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
                 }
                 inFieldElem = kK(inputVal)[i];
             }
-            if (fieldType>=20) {
+            if (fieldType>=20 && fieldType<127) {
                 unparseArrayOfRecords(buf, recschema, schema, inFieldElem, fieldType-20);
+            } else if (fieldType<=-20 && fieldType>-128) {
+                switch(inputVal->t) {
+                case 0:
+                    unparseRecord(buf, schema, kK(inputVal)[j], (-fieldType)-20);
+                    break;
+                case 98:
+                    unparseRecordFromTableRow(buf, schema, inputVal, j, (-fieldType)-20);
+                    break;
+                default:
+                    throw std::runtime_error("can't parse record from type "+std::to_string(inputVal->t));
+                }
             } else switch(fieldType) {
             case -4:{
                 unparseArrayElement<uint8_t>(buf, inputVal, j);

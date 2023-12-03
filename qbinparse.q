@@ -20,6 +20,7 @@
     '$[null pos 0;"";string[pos 0]," "],"line ",string[pos 1]," char ",string[pos 2],": ",fn vars[`tokens]vars`ptr;
     };
 
+//extended types:
 //0x8001 = case without default
 //0x8002 = case with default
 //0x8003 = big endian short
@@ -28,6 +29,9 @@
 //0x8006 = .NET style variable-length int
 //0x8007 = unsigned short (returned as int)
 //0x8008 = unsigned int (returned as long)
+//operators:
+//0x7f01 = recSize
+
 
 .binp.compileSchemaP1P1atom:{[vars;tname]
     tb:`byte$neg type value "`",tname,"$()";
@@ -191,9 +195,17 @@
     if[parsed; vars:.binp.compileSchemaFieldType[vars]];
     vars};
 
+.binp.operators:enlist[""]!enlist(::);
+.binp.operators["recSize"]:{x[`nFieldSchema],:0x7f01;x};
+
 .binp.compileSchemaFieldType:{[vars]
     tname:vars[`tokens][vars[`ptr]];
     vars[`ptr]+:1; //process type name
+    while[tname in key .binp.operators;
+        vars:.binp.operators[tname][vars];
+        tname:vars[`tokens][vars[`ptr]];
+        vars[`ptr]+:1; //process type name
+    ];
     $[tname in ("char";"byte";"short";"int";"long";"real";"float");
         vars:.binp.compileSchemaP1P1atom[vars;tname];
       tname in ("ushort";"uint");

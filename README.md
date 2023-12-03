@@ -43,6 +43,9 @@ The possible types are:
 * `parsedArray` _size_ _elementType_: an array with internal structure. The size specifies the number of bytes the array takes up, then the parsing process is recursively called on the array. _elementType_ must be a full field type, typically an array or record. If a regular `array` is used within a `parsedArray`, it will have its own _size_, which can be `repeat` to make it cover the entire `parsedArray`.
 * `case` _fieldName_ _val1_ _rec1_ _val2_ _rec2_ ... [`default` _recD_]: a variable-type field that is parsed as one of the specified records based on the value of the tag field. _valN_ are either integers or four-character strings. An optional default case can be added that covers values not listed in the cases.
 
+In addition the type may be preceded by an operator. The following operator is supported:
+* `recSize`: the field contains the record size, during parsing the "end of record" (for determining which fields run past the end of the input and how much data a `repeat` field can consume) is set according to this size.
+
 ## Parsing
 First compile the schema:
 ```q

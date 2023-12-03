@@ -335,3 +335,16 @@ unsignedArr:.binp.compileSchema"
     end
     ";
 if[not .binp.parse[unsignedArr; 0xffffffffffffffffffffffff;`main]~enlist[`f]!enlist([]f1:2#4294967295;f2:2#65535i); '"failed"];
+
+inlineSize:.binp.compileSchema"
+    record r
+        field f1 int
+        field f2 recSize int
+        field f3 array byte repeat
+    end
+    record main
+        field f1 record r
+        field f2 int
+    end
+    ";
+if[not .binp.parse[inlineSize; 0x010000000d000000020202020203000000;`main]~`f1`f2!(`f1`f2`f3!(1i;13i;0x0202020202);3i); '"failed"];

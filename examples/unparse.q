@@ -358,3 +358,45 @@ unsignedArr:.binp.compileSchema"
     end
     ";
 if[not .binp.unparse[unsignedArr;enlist[`f]!enlist([]f1:2#4294967295;f2:2#65535i);`main]~0xffffffffffffffffffffffff; '"failed"];
+
+
+nestedRecordMixed:.binp.compileSchema"
+    record point
+        field xpos int
+        field ypos int
+    end
+    record size
+        field width int
+        field height int
+    end
+    record main
+        field topLeft record point
+        field size record size
+    end
+    ";
+if[not .binp.unparse[nestedRecordMixed;`topLeft`size!(`xpos`ypos!1 2i;`width`height!3 4i);`main]~0x01000000020000000300000004000000; '"failed"];
+
+nestedRecord:.binp.compileSchema"
+    record point
+        field xpos int
+        field ypos int
+    end
+    record main
+        field topLeft record point
+        field bottomRight record point
+    end
+    ";
+if[not .binp.unparse[nestedRecord;`topLeft`bottomRight!(`xpos`ypos!1 2i;`xpos`ypos!3 4i);`main]~0x01000000020000000300000004000000; '"failed"];
+
+inlineSize:.binp.compileSchema"
+    record r
+        field f1 int
+        field f2 recSize int
+        field f3 array byte repeat
+    end
+    record main
+        field f1 record r
+        field f2 int
+    end
+    ";
+if[not .binp.unparse[inlineSize;`f1`f2!(`f1`f2`f3!(1i;13i;0x0202020202);3i);`main]~0x010000000d000000020202020203000000; '"failed"];
