@@ -813,21 +813,19 @@ std::vector<int> matchFieldPos(K fieldLabels, K dict) {
     if (keys->t != KS)
         throw std::runtime_error("unexpected type in columns, type "+std::to_string(keys->t));
     size_t fieldCount = fieldLabels->n;
-    if (fieldCount < 1)
-        throw std::runtime_error("no fields in record?!");
     std::vector<int> fieldPos(fieldCount);
     for (size_t i=0; i<fieldCount; ++i) {
         S fieldName = kS(fieldLabels)[i];
         bool found = false;
-        for (size_t j=i; i<keys->n; ++j) {
+        for (size_t j=0; j<keys->n; ++j) {
             if (fieldName == kS(keys)[j]) {
                 fieldPos[i] = j;
                 found = true;
                 break;
             }
-            if (!found) {
-                throw std::runtime_error("missing field: "+std::string(fieldName));
-            }
+        }
+        if (!found) {
+            throw std::runtime_error("missing field: "+std::string(fieldName));
         }
     }
     return fieldPos;
@@ -875,6 +873,9 @@ Buffer &unparseRecordFieldsFromTable(Buffer &buf, K schema, size_t schemaindex, 
                 break;
             case 4:
                 unparseArray<uint8_t,4>(buf, recschema, inFieldElem);
+                break;
+            case 10:
+                unparseArray<char,4>(buf, recschema, inFieldElem);
                 break;
             case -128:{
                 char ext = *recschema;
@@ -971,27 +972,12 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
     if (input->t != 99) {
         throw std::runtime_error(std::string()+kS(kK(schema)[0])[schemaindex]+": input is not a dictionary (found type "+std::to_string(input->t)+")");
     }
-    K inputKey = kK(input)[0];
     K inputVal = kK(input)[1];
     K fieldLabels = kK(kK(schema)[1])[schemaindex];
+    K inFieldElem = 0;
     size_t fieldCount = fieldLabels->n;
     char *recschema = (char*)kC(kK(kK(schema)[2])[schemaindex]);
-    K inFieldElem = 0;
-    std::vector<int> fieldPos(fieldCount);
-    for (size_t i=0; i<fieldCount; ++i) {
-        S fieldName = kS(fieldLabels)[i];
-        bool found = false;
-        for (size_t j=0; j<inputKey->n; ++j) {
-            if (fieldName == kS(inputKey)[j]) {
-                fieldPos[i] = j;
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            throw std::runtime_error("missing field: "+std::string(fieldName));
-        }
-    }
+    std::vector<int> fieldPos = matchFieldPos(fieldLabels, input);
     for (size_t i=0; i<fieldCount; ++i) {
         size_t j = fieldPos[i];
         S fieldName = kS(fieldLabels)[i];
@@ -1012,7 +998,7 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
                 if (inputVal->t != 0) {
                     throw std::runtime_error("can't populate array field - record value is a simple list");
                 }
-                inFieldElem = kK(inputVal)[i];
+                inFieldElem = kK(inputVal)[j];
             }
             if (fieldType>=20 && fieldType<127) {
                 unparseArrayOfRecords(buf, recschema, schema, inFieldElem, fieldType-20);

@@ -67,6 +67,30 @@ arrayOfRecord:.binp.compileSchema"
 if[not .binp.unparse[arrayOfRecord;enlist[`bs]!enlist([]cnt:(0x0102;0x0304);cnt2:([]num:5 6));`a]
     ~0x010205000000030406000000; '"failed"];
 
+arrayOfRecord2:.binp.compileSchema" //spanning test, don't change
+    record rec
+        field f int
+    end
+
+    record main
+        field recsL short
+        field recs array record rec xv recsL
+    end
+    ";
+if[not .binp.unparse[arrayOfRecord2;`recsL`recs!(4h;([]a:0 0 0 0;f:1 1 1 1));`main]~0x040001000000010000000100000001000000; '"failed"];
+
+arrayOfRecord3:.binp.compileSchema" //spanning test, don't change
+    record rec
+        field f int
+    end
+
+    record main
+        field recsL short
+        field recs array record rec xv recsL
+    end
+    ";
+if[not .binp.unparse[arrayOfRecord3;`recsL`a`recs!(4h;5i;([]f:4#1 1 1 1i));`main]~0x040001000000010000000100000001000000; '"failed"];
+
 varLengthArray:.binp.compileSchema"
     record a
         field intsL short
@@ -359,6 +383,15 @@ unsignedArr:.binp.compileSchema"
     ";
 if[not .binp.unparse[unsignedArr;enlist[`f]!enlist([]f1:2#4294967295;f2:2#65535i);`main]~0xffffffffffffffffffffffff; '"failed"];
 
+stringArr:.binp.compileSchema"
+    record r
+        field f1 array char x 4
+    end
+    record main
+        field f array record r x 2
+    end
+    ";
+if[not .binp.unparse[stringArr;enlist[`f]!enlist([]f1:("abcd";"efgh"));`main]~0x6162636465666768; '"failed"];
 
 nestedRecordMixed:.binp.compileSchema"
     record point
