@@ -507,6 +507,10 @@ K parseExtType(K schema, char *&ptr, char *end, char *&recschema, K partialResul
         return ki((uint16_t)readShort(ptr));
     case 8:
         return kj((uint32_t)readInt(ptr));
+    case 9:
+        return ki((uint16_t)readBEShort(ptr));
+    case 10:
+        return kj((uint32_t)readBEInt(ptr));
     default:
         return ksym("invalidExtType");
     }
@@ -1139,6 +1143,16 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
                 }
                 case 8:{
                     unparseArrayElement<uint32_t>(buf, inputVal, j);
+                    break;
+                }
+                case 9:{
+                    uint16_t out = flipEndian(getElemFromK<uint16_t>(inputVal, j));
+                    buf.write(out);
+                    break;
+                }
+                case 10:{
+                    uint32_t out = flipEndian(getElemFromK<uint32_t>(inputVal, j));
+                    buf.write(out);
                     break;
                 }
                 default:

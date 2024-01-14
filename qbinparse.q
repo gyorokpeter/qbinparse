@@ -29,6 +29,8 @@
 //0x8006 = .NET style variable-length int
 //0x8007 = unsigned short (returned as int)
 //0x8008 = unsigned int (returned as long)
+//0x8009 = unsigned big endian short (returned as int)
+//0x800a = unsigned big endian int (returned as long)
 //operators:
 //0x7f01 = recSize
 
@@ -52,9 +54,9 @@
 .binp.compileSchemaP1P1atomBE:{[vars]
     tname:`$vars[`tokens][vars[`ptr]];
     vars[`ptr]+:1; //process "be"
-    if[not tname in `short`int; '"nyi type for \"le\": ",string[tname]];
-    tb:`byte$neg type value "`",string[tname],"$()";
-    extType:(`short`int!0x0304)tname;
+    if[not tname in `short`int`ushort`uint; '"nyi type for \"be\": ",string[tname]];
+    tb:`byte$neg type (`short`int`ushort`uint!`short`int`short`int)[tname]$();
+    extType:(`short`int`ushort`uint!0x0304090a)tname;
     vars[`nFieldSchema],:0x80,extType;
     vars[`nFieldTypes],:tb;
     vars};

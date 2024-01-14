@@ -200,10 +200,11 @@ bigEndian:.binp.compileSchema"
     record main
         field f1 be short
         field f2 be int
+        field f3 be ushort
+        field f4 be uint
     end
     ";
-
-if[not .binp.parse[bigEndian;0x000100000001;`main]~`f1`f2!(1h;1i); '"failed"];
+if[not .binp.parse[bigEndian;0x000100000001800080000000;`main]~`f1`f2`f3`f4!(1h;1i;32768i;2147483648j); '"failed"];
 
 repeatingAtom:.binp.compileSchema"
     record main
