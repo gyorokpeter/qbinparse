@@ -213,6 +213,17 @@ repeatingAtom:.binp.compileSchema"
     ";
 if[not .binp.parse[repeatingAtom;0x010000000200000003000000;`main]~enlist[`f1]!enlist 1 2 3i; '"failed"];
 
+repeatingAtomPerf:.binp.compileSchema"
+    record main
+        field f1 array byte repeat
+    end
+    ";
+{arr:100000000#0x010203;
+    ts:.Q.ts[.binp.parse;(repeatingAtomPerf;arr;`main)];
+    if[ts[0;0]>100;{'x}failed];
+    if[not ts[1]~enlist[`f1]!enlist arr; {'x}"failed"];
+    }[];
+
 repeatingRecord:.binp.compileSchema"
     record item
         field a int

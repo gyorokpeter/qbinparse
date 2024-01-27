@@ -369,29 +369,34 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
         }
     } else {    //not fixedSize
         if(elementType > -20) { //elements are atoms
-            K result = ktn(-elementType,0);
             int elementSize = getTypeSize(elementType);
-            while(ptr < end) {
-                bool cond = false;
-                if (!as.repeat) {
+            J elementCount;
+            char *actualEnd;
+            if (as.repeat) {
+                actualEnd = end;
+            } else {
+                actualEnd = ptr;
+                while (actualEnd < end) {
+                    bool cond = false;
                     switch(as.sizeMode) {
                         case 2:
-                            cond = *(uint8_t *)ptr == as.guard;
+                            cond = *(uint8_t *)actualEnd == as.guard;
                             break;
                         case 3:
-                            cond = *(uint16_t *)ptr == as.guard;
+                            cond = *(uint16_t *)actualEnd == as.guard;
                             break;
                         case 4:
-                            cond = *(uint32_t *)ptr == as.guard;
+                            cond = *(uint32_t *)actualEnd == as.guard;
                             break;
                     }
+                    if (cond) break;
+                    actualEnd += elementSize;
                 }
-                if (cond) break;
-                uint64_t atom;
-                memcpy(&atom, ptr, elementSize);
-                ptr += elementSize;
-                ja(&result, &atom);
             }
+            elementCount = (actualEnd-ptr)/elementSize;
+            K result = ktn(-elementType,elementCount);
+            memcpy(kG(result), ptr, elementCount*elementSize);
+            ptr = actualEnd;
             return result;
         } else {    //elements are records
             K result = ktn(0,0);
