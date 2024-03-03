@@ -142,16 +142,22 @@
         ename:vars[`tokens][vars[`ptr]];
         vars[`ptr]+:1; //process element type name
         $[ename in ("char";"byte";"short";"int";"long";"real";"float");
-            tb:`byte$type value "`",ename,"$()";
+            ta:tb:`byte$type value "`",ename,"$()";
         ename like "record";
             [
                 rn:`$vars[`tokens][vars[`ptr]];
                 if[not rn in vars[`out][`recName]; '"rec used before defined: ",string rn];
-                tb:`byte$(vars[`out][`recName]?rn)+20;
+                ta:tb:`byte$(vars[`out][`recName]?rn)+20;
                 vars[`ptr]+:1 //process record name
             ];
+        ename in ("uint";"ushort");
+            [
+                ind:("ushort";"uint")?ename;
+                ta:0x00,(0x8007;0x8008)ind;
+                tb:`byte$-5 -6h ind;
+            ];
         {'"unknown type in array: ",x}[ename]];
-        vars[`nFieldSchema],:tb;
+        vars[`nFieldSchema],:ta;
         vars[`nFieldTypes],:tb;
     ];
     if[parsed;

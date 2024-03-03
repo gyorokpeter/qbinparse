@@ -334,25 +334,52 @@ arraySizeResult readArraySize(char *&ptr, char *end, char *&recschema, K partial
     return result;
 }
 
-inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult, int elementType) {
+inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult, int elementType, bool unsignedExt = false) {
     arraySizeResult as = readArraySize(ptr, end, recschema, partialResult);
     if (as.status == arraySizeResult::endOfBuffer) return ksym("endOfBuffer");
     if (as.status == arraySizeResult::badSizeSpec) return ksym("invalidArraySizeSpecifier");
     if (as.fixedSize) {
-        if(as.size >= 2100000000) {
+        if (as.size >= 2100000000) {
             ptr = end;
             return ksym("tooLargeArray");
         }
         if (elementType > -20) {
-            K result = ktn(-elementType, as.size);
-            uint64_t fullsize = uint64_t(as.size)*getTypeSize(elementType);
-            if(fullsize > 4200000000) {
+            int outElementType = elementType;
+            if (unsignedExt) outElementType -= 1;
+            K result = ktn(-outElementType, as.size);
+            uint64_t inSize = uint64_t(as.size)*getTypeSize(elementType);
+            uint64_t outSize = inSize;
+            if (unsignedExt) outSize *= 2;
+            if (outSize > 4200000000) {
                 ptr = end;
                 return ksym("tooLargeArray");
             }
-            if(ptr+fullsize > end) return ksym("arrayRunsPastInput");
-            memcpy(kG(result), ptr, fullsize);
-            ptr += fullsize;
+            if (ptr+inSize > end) return ksym("arrayRunsPastInput");
+            if (unsignedExt) {
+                switch(elementType) {
+                case -5:{
+                    uint16_t *in = (uint16_t*)ptr;
+                    uint32_t *out = (uint32_t*)kG(result);
+                    for (J i=0; i<as.size; ++i) {
+                        *out++ = *in++;
+                    }
+                    break;
+                }
+                case -6:{
+                    uint32_t *in = (uint32_t*)ptr;
+                    uint64_t *out = (uint64_t*)kG(result);
+                    for (J i=0; i<as.size; ++i) {
+                        *out++ = *in++;
+                    }
+                    break;
+                }
+                default:
+                    return ksym("cannotUnsign");
+                }
+            } else {
+                memcpy(kG(result), ptr, outSize);
+            }
+            ptr += inSize;
             return result;
         } else if (elementType <= -20) {
             uint64_t fullsize = uint64_t(as.size)*sizeof(void*);
@@ -538,6 +565,23 @@ K parseField(K schema, char *&ptr, char *start, char *&end, char *&recschema, K 
         return parseExtType(schema, ptr, end, recschema, partialResult);
     } else if (fieldType <= -20) {
         return parseRecord(schema, ptr, end, (-fieldType)-20);
+    } else if (fieldType == 0) {
+        char elemType = *recschema;
+        ++recschema;
+        if (elemType == -128) {
+            char elemExtType = *recschema;
+            ++recschema;
+            switch(elemExtType) {
+            case 7:
+                return parseArray(schema, ptr, end, recschema, partialResult, -5, true);
+            case 8:
+                return parseArray(schema, ptr, end, recschema, partialResult, -6, true);
+            default:
+                return ksym("unknownArrayElementExtType");
+            }
+        } else {
+            return ksym("unknownArrayElementType");
+        }
     } else if (fieldType > 0) {
         return parseArray(schema, ptr, end, recschema, partialResult, -fieldType);
     } else switch(fieldType) {
@@ -575,7 +619,7 @@ K parseField(K schema, char *&ptr, char *start, char *&end, char *&recschema, K 
         return kc(readChar(ptr));
         break;
     default:
-        return ki(ni);
+        return ksym("unknownFieldType");
     }
 }
 
@@ -1003,7 +1047,7 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
             ++recschema;
         }
         try {
-            if (fieldType>0 || (fieldType == -128 && (fieldExtType == 1 || fieldExtType == 2 || fieldExtType == 5))) {
+            if (fieldType>=0 || (fieldType == -128 && (fieldExtType == 1 || fieldExtType == 2 || fieldExtType == 5))) {
                 if (inputVal->t != 0) {
                     throw std::runtime_error("can't populate array field - record value is a simple list");
                 }
@@ -1079,6 +1123,32 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
                 unparseArray<char,10>(buf, recschema, inFieldElem);
                 break;
             }
+            case 0:{
+                char elemType = *recschema;
+                ++recschema;
+                switch(elemType) {
+                case -128:{
+                    char elemExtType = *recschema;
+                    ++recschema;
+                    switch(elemExtType) {
+                    case 7:{
+                        unparseArray<uint16_t,5>(buf, recschema, inFieldElem);
+                        break;
+                    }
+                    case 8:{
+                        unparseArray<uint32_t,6>(buf, recschema, inFieldElem);
+                        break;
+                    }
+                    default:
+                        throw std::runtime_error("unparseRecord NYI array element ext type "+std::to_string(elemExtType));
+                    }
+                    break;
+                }
+                default:
+                    throw std::runtime_error("unparseRecord NYI array element type "+std::to_string(elemType));
+                }
+                break;
+            }
             case -128:{
                 switch(fieldExtType) {
                 case 1:
@@ -1121,7 +1191,7 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
                         unparseArrayOfRecords(tmpbuf, recschema, schema, inFieldElem, innerFieldType-20);
                     } else switch(innerFieldType) {
                     default:
-                        throw std::runtime_error("unparseRecord NYI field type in parsedArray: "+std::to_string(innerFieldType));
+                        throw std::runtime_error("unparseRecord NYI parsedArray field type: "+std::to_string(innerFieldType));
                     }
                     size_t innerSize = tmpbuf.size();
                     if (arrsz.size<innerSize) {

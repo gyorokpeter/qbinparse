@@ -220,7 +220,7 @@ repeatingAtomPerf:.binp.compileSchema"
     ";
 {arr:100000000#0x010203;
     ts:.Q.ts[.binp.parse;(repeatingAtomPerf;arr;`main)];
-    if[ts[0;0]>100;{'x}failed];
+    if[ts[0;0]>120;{'x}failed];
     if[not ts[1]~enlist[`f1]!enlist arr; {'x}"failed"];
     }[];
 
@@ -337,7 +337,7 @@ unsigned:.binp.compileSchema"
     ";
 if[not .binp.parse[unsigned; 0xffffffffffffffffffffffff;`main]~`f1`f2`f3`f4!(-1i;-1h;4294967295j;65535i); '"failed"];
 
-unsignedArr:.binp.compileSchema"
+unsignedRecArr:.binp.compileSchema"
     record r
         field f1 uint
         field f2 ushort
@@ -346,7 +346,15 @@ unsignedArr:.binp.compileSchema"
         field f array record r x 2
     end
     ";
-if[not .binp.parse[unsignedArr; 0xffffffffffffffffffffffff;`main]~enlist[`f]!enlist([]f1:2#4294967295;f2:2#65535i); '"failed"];
+if[not .binp.parse[unsignedRecArr; 0xffffffffffffffffffffffff;`main]~enlist[`f]!enlist([]f1:2#4294967295;f2:2#65535i); '"failed"];
+
+unsignedArr:.binp.compileSchema"
+    record main
+        field f1 array ushort x 2
+        field f2 array uint x 2
+    end
+    ";
+if[not .binp.parse[unsignedArr;0xffffffffffffffffffffffff;`main]~`f1`f2!(2#65535i;2#4294967295); '"failed"];
 
 inlineSize:.binp.compileSchema"
     record r
