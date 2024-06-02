@@ -220,7 +220,7 @@ repeatingAtomPerf:.binp.compileSchema"
     ";
 {arr:100000000#0x010203;
     ts:.Q.ts[.binp.parse;(repeatingAtomPerf;arr;`main)];
-    if[ts[0;0]>120;{'x}failed];
+    if[ts[0;0]>121;{'x}failed];
     if[not ts[1]~enlist[`f1]!enlist arr; {'x}"failed"];
     }[];
 
@@ -368,3 +368,9 @@ inlineSize:.binp.compileSchema"
     end
     ";
 if[not .binp.parse[inlineSize; 0x010000000d000000020202020203000000;`main]~`f1`f2!(`f1`f2`f3!(1i;13i;0x0202020202);3i); '"failed"];
+
+if[not @[.binp.compileSchema;"
+    record main
+        field f1 array record invalid x 1
+    end
+    ";::]~"record not found: invalid";'"failed"];

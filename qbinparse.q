@@ -110,7 +110,7 @@
         vars[`ptr]+:1;    //process case label
 
         caseRec:`$vars[`tokens][vars[`ptr]];
-        if[not caseRec in vars[`out][`recName]; .binp.error[vars;{"invalid record in case: ",string caseRec}]];
+        if[not caseRec in vars[`out][`recName]; .binp.error[vars;{[caseRec;x]"invalid record in case: ",string caseRec}[caseRec]]];
         vars[`ptr]+:1;    //process case record
         caseRecN:`byte$vars[`out][`recName]?caseRec;
 
@@ -146,7 +146,9 @@
         ename like "record";
             [
                 rn:`$vars[`tokens][vars[`ptr]];
-                if[not rn in vars[`out][`recName]; '"rec used before defined: ",string rn];
+                if[not rn in vars[`out][`recName]; // '"rec used before defined: ",string rn];
+                    vars[`out],:enlist(rn;::;::);
+                ];
                 ta:tb:`byte$(vars[`out][`recName]?rn)+20;
                 vars[`ptr]+:1 //process record name
             ];
@@ -255,7 +257,13 @@
     ];
     if[not vars[`tokens][vars[`ptr]]~"end"; '"expected \"end\", found ",.Q.s1 vars[`tokens][vars[`ptr]]];
     vars[`ptr]+:1;  //process "end"
-    vars[`out],:enlist(nRecName;vars`nFieldNames;`char$vars`nFieldSchema);
+    $[nRecName in vars[`out;`recName];
+        [
+            ind:vars[`out;`recName]?nRecName;
+            vars[`out;ind]:(nRecName;vars`nFieldNames;`char$vars`nFieldSchema);
+        ];
+        vars[`out],:enlist(nRecName;vars`nFieldNames;`char$vars`nFieldSchema)
+    ];
     vars};
 
 .binp.getTokens:{[file;schema]
@@ -287,4 +295,5 @@
         ptr:vars`ptr;
     ];
     out:vars`out;
+    if[count bad:exec recName from out where (::)~/:fieldName; '"record not found: ",", "sv string bad];
     value flip out};
