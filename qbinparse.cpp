@@ -334,7 +334,7 @@ arraySizeResult readArraySize(char *&ptr, char *end, char *&recschema, K partial
     return result;
 }
 
-inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult, int elementType, bool unsignedExt = false) {
+inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partialResult, int elementType, bool unsignedExt = false, bool bigEndian = false) {
     arraySizeResult as = readArraySize(ptr, end, recschema, partialResult);
     if (as.status == arraySizeResult::endOfBuffer) return ksym("endOfBuffer");
     if (as.status == arraySizeResult::badSizeSpec) return ksym("invalidArraySizeSpecifier");
@@ -355,7 +355,7 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
                 return ksym("tooLargeArray");
             }
             if (ptr+inSize > end) return ksym("arrayRunsPastInput");
-            if (unsignedExt) {
+            if (unsignedExt && !bigEndian) {
                 switch(elementType) {
                 case -5:{
                     uint16_t *in = (uint16_t*)ptr;
@@ -370,6 +370,48 @@ inline K parseArray(K schema, char *&ptr, char *end, char *&recschema, K partial
                     uint64_t *out = (uint64_t*)kG(result);
                     for (J i=0; i<as.size; ++i) {
                         *out++ = *in++;
+                    }
+                    break;
+                }
+                default:
+                    return ksym("cannotUnsign");
+                }
+            } else if (unsignedExt && bigEndian) {
+                switch(elementType) {
+                case -5:{
+                    uint16_t *in = (uint16_t*)ptr;
+                    uint32_t *out = (uint32_t*)kG(result);
+                    for (J i=0; i<as.size; ++i) {
+                        *out++ = flipEndian(*in++);
+                    }
+                    break;
+                }
+                case -6:{
+                    uint32_t *in = (uint32_t*)ptr;
+                    uint64_t *out = (uint64_t*)kG(result);
+                    for (J i=0; i<as.size; ++i) {
+                        *out++ = flipEndian(*in++);
+                    }
+                    break;
+                }
+                default:
+                    return ksym("cannotUnsign");
+                }
+            } else if (!unsignedExt && bigEndian) {
+                switch(elementType) {
+                case -5:{
+                    uint16_t *in = (uint16_t*)ptr;
+                    uint16_t *out = (uint16_t*)kG(result);
+                    for (J i=0; i<as.size; ++i) {
+                        *out++ = flipEndian(*in++);
+                    }
+                    break;
+                }
+                case -6:{
+                    uint32_t *in = (uint32_t*)ptr;
+                    uint32_t *out = (uint32_t*)kG(result);
+                    for (J i=0; i<as.size; ++i) {
+                        *out++ = flipEndian(*in++);
                     }
                     break;
                 }
@@ -576,6 +618,15 @@ K parseField(K schema, char *&ptr, char *start, char *&end, char *&recschema, K 
                 return parseArray(schema, ptr, end, recschema, partialResult, -5, true);
             case 8:
                 return parseArray(schema, ptr, end, recschema, partialResult, -6, true);
+            // big-endian types
+            case 3:
+                return parseArray(schema, ptr, end, recschema, partialResult, -5, false, true);
+            case 4:
+                return parseArray(schema, ptr, end, recschema, partialResult, -6, false, true);
+            case 9:
+                return parseArray(schema, ptr, end, recschema, partialResult, -5, true, true);
+            case 10:
+                return parseArray(schema, ptr, end, recschema, partialResult, -6, true, true);
             default:
                 return ksym("unknownArrayElementExtType");
             }
@@ -814,6 +865,23 @@ Buffer &unparseArray(Buffer &buf, char *&recschema, K inFieldElem) {
             Ct val = getElemFromK<Ct>(inFieldElem, i);
             buf.write((uint8_t*)&val, sizeof(Ct));
         }
+    }
+    return buf;
+}
+
+template<int Qt> class UnsignedCt;
+template<> struct UnsignedCt<5> { typedef uint16_t type; };
+template<> struct UnsignedCt<6> { typedef uint32_t type; };
+
+template<typename Ct, int Qt>
+Buffer &unparseArrayBE(Buffer &buf, char *&recschema, K inFieldElem, bool bigEndian = false) {
+    arraySizeResult arrsz = readArraySizeFromSchema(recschema);
+    if (arrsz.constantSize && arrsz.size != inFieldElem->n) {
+        throw std::runtime_error("expected "+std::to_string(arrsz.size)+" items, got "+std::to_string(inFieldElem->n));
+    }
+    for (size_t i=0; i<inFieldElem->n; ++i) {
+        Ct val = flipEndian(typename UnsignedCt<Qt>::type(getElemFromK<Ct>(inFieldElem, i)));
+        buf.write((uint8_t*)&val, sizeof(Ct));
     }
     return buf;
 }
@@ -1131,12 +1199,28 @@ Buffer &unparseRecord(Buffer &buf, K schema, K input, size_t schemaindex) {
                     char elemExtType = *recschema;
                     ++recschema;
                     switch(elemExtType) {
+                    case 3:{
+                        unparseArrayBE<int16_t,5>(buf, recschema, inFieldElem);
+                        break;
+                    }
+                    case 4:{
+                        unparseArrayBE<int32_t,6>(buf, recschema, inFieldElem);
+                        break;
+                    }
                     case 7:{
                         unparseArray<uint16_t,5>(buf, recschema, inFieldElem);
                         break;
                     }
                     case 8:{
                         unparseArray<uint32_t,6>(buf, recschema, inFieldElem);
+                        break;
+                    }
+                    case 9:{
+                        unparseArrayBE<uint16_t,5>(buf, recschema, inFieldElem);
+                        break;
+                    }
+                    case 10:{
+                        unparseArrayBE<uint32_t,6>(buf, recschema, inFieldElem);
                         break;
                     }
                     default:

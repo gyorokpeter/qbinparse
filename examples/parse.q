@@ -206,6 +206,16 @@ bigEndian:.binp.compileSchema"
     ";
 if[not .binp.parse[bigEndian;0x000100000001800080000000;`main]~`f1`f2`f3`f4!(1h;1i;32768i;2147483648j); '"failed"];
 
+bigEndianArrays:.binp.compileSchema"
+    record a
+        field f1 array be short x 2
+        field f2 array be int x 2
+        field f3 array be ushort x 2
+        field f4 array be uint x 2
+    end
+    ";
+if[not .binp.parse[bigEndianArrays;0x0001000200000003000000047fff80007fffffff80000000;`a]~`f1`f2`f3`f4!(1 2h;3 4i;32767 32768i;2147483647 2147483648); '"failed"];
+
 repeatingAtom:.binp.compileSchema"
     record main
         field f1 array int repeat
