@@ -124,7 +124,7 @@ inline int getTypeSize(int typeNum) {
     return 0;
 }
 
-K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex);
+K parseRecord(K schema, char *&ptr, char *end, J schemaindex);
 
 inline K tot(K records) {   //to table - q should expose this feature
     if(records->n == 0) return records;
@@ -217,7 +217,7 @@ inline K tot(K records) {   //to table - q should expose this feature
 
 K appendGen(K list, K value) {
     K result = ktn(0, list->n+1);
-    for (size_t i=0; i<list->n; ++i) {
+    for (J i=0; i<list->n; ++i) {
         switch(list->t) {
             case 0: kK(result)[i] = r1(kK(list)[i]); break;
             case KC: kK(result)[i] = kc(kC(list)[i]); break;
@@ -674,7 +674,7 @@ K parseField(K schema, char *&ptr, char *start, char *&end, char *&recschema, K 
     }
 }
 
-K parseRecord(K schema, char *&ptr, char *end, size_t schemaindex) {
+K parseRecord(K schema, char *&ptr, char *end, J schemaindex) {
     if (schemaindex >= kK(schema)[1]->n) {
         return ksym("invalidSchemaId");
     }
@@ -861,7 +861,7 @@ Buffer &unparseArray(Buffer &buf, char *&recschema, K inFieldElem) {
     if (inFieldElem->t == Qt) { //no conversion required
         buf.write(kG(inFieldElem), sizeof(Ct)*inFieldElem->n);
     } else {
-        for (size_t i=0; i<inFieldElem->n; ++i) {
+        for (J i=0; i<inFieldElem->n; ++i) {
             Ct val = getElemFromK<Ct>(inFieldElem, i);
             buf.write((uint8_t*)&val, sizeof(Ct));
         }
@@ -879,7 +879,7 @@ Buffer &unparseArrayBE(Buffer &buf, char *&recschema, K inFieldElem, bool bigEnd
     if (arrsz.constantSize && arrsz.size != inFieldElem->n) {
         throw std::runtime_error("expected "+std::to_string(arrsz.size)+" items, got "+std::to_string(inFieldElem->n));
     }
-    for (size_t i=0; i<inFieldElem->n; ++i) {
+    for (J i=0; i<inFieldElem->n; ++i) {
         Ct val = flipEndian(typename UnsignedCt<Qt>::type(getElemFromK<Ct>(inFieldElem, i)));
         buf.write((uint8_t*)&val, sizeof(Ct));
     }
@@ -938,7 +938,7 @@ std::vector<int> matchFieldPos(K fieldLabels, K dict) {
     for (size_t i=0; i<fieldCount; ++i) {
         S fieldName = kS(fieldLabels)[i];
         bool found = false;
-        for (size_t j=0; j<keys->n; ++j) {
+        for (J j=0; j<keys->n; ++j) {
             if (fieldName == kS(keys)[j]) {
                 fieldPos[i] = j;
                 found = true;
@@ -1062,7 +1062,7 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
         if (arrsz.constantSize && arrsz.size != elemCount) {
             throw std::runtime_error("expected "+std::to_string(arrsz.size)+" items, got "+std::to_string(elemCount));
         }
-        for (size_t i=0; i<elemCount; ++i) {
+        for (J i=0; i<elemCount; ++i) {
             unparseRecord(buf, schema, kK(inFieldElem)[i], schemaindex);
         }
     } else if (inFieldElem->t == XT) {  //collapsed records
@@ -1080,7 +1080,7 @@ Buffer &unparseArrayOfRecords(Buffer &buf, char *&recschema, K schema, K inField
             throw std::runtime_error("expected "+std::to_string(arrsz.size)+" items, got "+std::to_string(firstField->n));
         }
         std::vector<int> fieldPos = matchFieldPos(fieldLabels, dict);
-        for (size_t i=0; i<elemCount; ++i) {
+        for (J i=0; i<elemCount; ++i) {
             unparseRecordFieldsFromTable(buf, schema, schemaindex, values, fieldPos, i);
         }
     } else {
@@ -1339,7 +1339,7 @@ K k_binparse_parse(K schema, K input, K mainType) {
     if (mainType->t != -11) { return kerror("parse: main type must be a symbol"); }
     char *ptr = (char*)kG(input);
     char *end = ptr+input->n;
-    for (size_t i=0; i<kK(schema)[0]->n; ++i) {
+    for (J i=0; i<kK(schema)[0]->n; ++i) {
         if (kS(kK(schema)[0])[i] == ssym(mainType->s)) {
             K result = parseRecord(schema, ptr, end, i);
             if (ptr < end) {
@@ -1362,7 +1362,7 @@ K k_binparse_parseRepeat(K schema, K input, K mainType) {
     if (mainType->t != -11) { return kerror("parse: main type must be a symbol"); }
     char *ptr = (char*)kG(input);
     char *end = ptr+input->n;
-    for (size_t i=0; i<kK(schema)[0]->n; ++i) {
+    for (J i=0; i<kK(schema)[0]->n; ++i) {
         if (kS(kK(schema)[0])[i] == mainType->s) {
             K result = ktn(0,0);
             while (ptr < end)
@@ -1376,7 +1376,7 @@ K k_binparse_parseRepeat(K schema, K input, K mainType) {
 K k_binparse_unparse(K schema, K input, K mainType) {
     if (mainType->t != -11) { return kerror("unparse: main type must be a symbol"); }
     if (schema->t != 0) { return kerror("unparse: schema must be general list"); }
-    for (size_t i=0; i<kK(schema)[0]->n; ++i) {
+    for (J i=0; i<kK(schema)[0]->n; ++i) {
         if (kS(kK(schema)[0])[i] == mainType->s) {
             Buffer buf;
             try {

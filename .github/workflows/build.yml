@@ -1,0 +1,24 @@
+name: qbinparse
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-qbinparse:
+    runs-on: windows-2025
+    steps:
+    - name: Project checkout
+      uses: actions/checkout@v4
+    - name: Checkout kx repo
+      uses: actions/checkout@v4
+      with:
+        repository: KxSystems/kdb
+        path: kdb
+    - name: Build
+      run: |
+        echo "set KX_KDB_PATH=%CD%\kdb" >config.cmd
+        echo "set PATH=C:\msys64\usr\bin;%PATH%" >>config.cmd
+        ./b64.cmd
