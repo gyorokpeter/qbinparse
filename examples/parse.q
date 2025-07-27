@@ -384,3 +384,5 @@ if[not @[.binp.compileSchema;"
         field f1 array record invalid x 1
     end
     ";::]~"record not found: invalid";'"failed"];
+
+if[any "-test"~/:.z.x; exit 0];

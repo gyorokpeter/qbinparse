@@ -1,6 +1,6 @@
 {
     .binp.priv.path:"/"sv -1_"/"vs ssr[;"\\";"/"]first -3#value .z.s;
-    lib:`$":",.binp.priv.path,"/qbinparse";
+    lib:`$":",.binp.priv.path,"/qbinparse_",string .z.o;
     .binp.priv.parse:lib 2:(`k_binparse_parse;3);
     .binp.parseRepeat:lib 2:(`k_binparse_parseRepeat;3);
     .binp.unparse:lib 2:(`k_binparse_unparse;3);

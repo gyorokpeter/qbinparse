@@ -1,0 +1,39 @@
+name: qbinparse
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-qbinparse:
+    runs-on: windows-2025
+    steps:
+    - name: Project checkout
+      uses: actions/checkout@v4
+    - name: Checkout kx repo
+      uses: actions/checkout@v4
+      with:
+        repository: KxSystems/kdb
+        path: kdb
+    - name: Build
+      run: |
+        echo "set KX_KDB_PATH=%CD%\kdb" >config.cmd
+        echo "set PATH=C:\msys64\usr\bin;%PATH%" >>config.cmd
+        ./mklib64.cmd
+        ./b64.cmd
+    - name: Test
+      shell: cmd
+      env:
+        KX_DOWNLOAD_TOKEN: ${{ secrets.KX_DOWNLOAD_TOKEN }}
+        KDB_LICENSE_B64: ${{ secrets.KDB_LICENSE_B64 }}
+      run: |
+        curl -sL -D curlout.txt --oauth2-bearer "%KX_DOWNLOAD_TOKEN%" -o w64.zip "https://portal.dl.kx.com/assets/raw/kdb-x/kdb-x/~latest~/w64.zip"
+        type curlout.txt
+        unzip w64.zip
+        set "PATH=%CD%\w64;%PATH%"
+        bash -c "echo $KDB_LICENSE_B64 | base64 -d" >kc.lic
+        q examples/parse.q -test
+        q examples/unparse.q -test
+        echo All tests done

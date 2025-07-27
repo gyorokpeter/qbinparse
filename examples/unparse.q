@@ -454,3 +454,5 @@ inlineSize:.binp.compileSchema"
     end
     ";
 if[not .binp.unparse[inlineSize;`f1`f2!(`f1`f2`f3!(1i;13i;0x0202020202);3i);`main]~0x010000000d000000020202020203000000; '"failed"];
+
+if[any "-test"~/:.z.x; exit 0];
