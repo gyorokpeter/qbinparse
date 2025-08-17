@@ -5,6 +5,8 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  release:
+    types: [ published ]
 
 jobs:
   build-qbinparse:
@@ -37,3 +39,10 @@ jobs:
         q examples/parse.q -test
         q examples/unparse.q -test
         echo All tests done
+    - name: Upload release
+      if: github.event_name == 'release'
+      env:
+        GITHUB_TOKEN: ${{ github.TOKEN }}
+      run: |
+        zip qbinparse_w64.zip qbinparse.q qbinparse_w64.dll
+        gh release upload ${{github.event.release.tag_name}} qbinparse_w64.zip
