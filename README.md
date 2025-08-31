@@ -103,3 +103,8 @@ Parsing failures don't throw errors but instead return a partial object with the
 * `noCaseMatch`: a `case` field encountered an input value that is not among the cases and there is no `default` case
 
 Furthermore if there are extra bytes left over after parsing the main record, the leftover bytes are added to the record with a field named `xxxRemainingData`. This is also considered a type of error and in particular the `.binp.unparse` function will ignore this field. To describe a format that allows garbage/padding/irrelevant data at the end, use an `array byte repeat` field as the last field to capture all the remaining bytes.
+
+# Rationale
+*Why not use Google Protocol Buffers?*
+
+Google Protocol Buffers (GPB) is another schema-based serialization library. If you are developing a new application, you might want to use GPB for communication. However, a major difference is that GPB places its own constraints on the binary data. GPB uses its own format and only stuffs the content based on the schema into that format. If you need to interface with an existing application, you can only use GPB if you are able to modify the application or you are lucky and it is already using GPB. In contrast, qbinparse places no constraints on what the binary data must look like - it is the schema that describes every single byte. It is meant for interfacing with existing applications that are not modifiable, as well as for file formats with a pre-existing format specification.
