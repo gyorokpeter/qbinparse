@@ -1,21 +1,22 @@
-{
-    .binp.priv.path:"/"sv -1_"/"vs ssr[;"\\";"/"]first -3#value .z.s;
-    lib:`$":",.binp.priv.path,"/qbinparse_",string .z.o;
-    .binp.priv.parse:lib 2:(`k_binparse_parse;3);
-    .binp.parseRepeat:lib 2:(`k_binparse_parseRepeat;3);
-    .binp.unparse:lib 2:(`k_binparse_unparse;3);
+debug:0b;
+
+lib:$[.z.o like "w*";  //hack until fixed in core
+    {
+        path:"/"sv -1_"/"vs ssr[;"\\";"/"]first -3#value .z.s;
+        .Q.m.SP,:enlist path;
+        use`qbinparse_c
     }[];
+    use`..qbinparse_c];
 
-.binp.debug:0b;
-.binp.parse:{[schema;data;mainType]
-    if[.binp.debug; (`$":",.binp.priv.path,"/lastExample") set (schema;data;mainType)];
-    .binp.priv.parse[schema;data;mainType]};
+.z.m.parse:{[schema;data;mainType]
+    if[debug; `:::lastExample set (schema;data;mainType)];
+    lib.parse[schema;data;mainType]};
 
-.binp.unLE:{$[-4h=type x;enlist x;reverse 0x00 vs x]};
+unLE:{$[-4h=type x;enlist x;reverse 0x00 vs x]};
 
-.binp.tokenize:{{x where not(1<count each x)&x[;0]in" /\t\n"} -4!x};
+tokenize:{{x where not(1<count each x)&x[;0]in" /\t\n"} -4!x};
 
-.binp.error:{[vars;fn]
+error:{[vars;fn]
     pos:vars[`tokenPos][vars`ptr];
     '$[null pos 0;"";string[pos 0]," "],"line ",string[pos 1]," char ",string[pos 2],": ",fn vars[`tokens]vars`ptr;
     };
@@ -35,13 +36,13 @@
 //0x7f01 = recSize
 
 
-.binp.compileSchemaP1P1atom:{[vars;tname]
+compileSchemaP1P1atom:{[vars;tname]
     tb:`byte$neg type value "`",tname,"$()";
     vars[`nFieldSchema],:tb;
     vars[`nFieldTypes],:tb;
     vars};
 
-.binp.compileSchemaP1P1atomEx:{[vars;tname]
+compileSchemaP1P1atomEx:{[vars;tname]
     $[tname~"dotnetVarLengthInt";
         [
             vars[`nFieldSchema],:0x8006;
@@ -51,7 +52,7 @@
     ];
     vars};
 
-.binp.compileSchemaP1P1atomBE:{[vars]
+compileSchemaP1P1atomBE:{[vars]
     tname:`$vars[`tokens][vars[`ptr]];
     vars[`ptr]+:1; //process "be"
     if[not tname in `short`int`ushort`uint; '"nyi type for \"be\": ",string[tname]];
@@ -61,7 +62,7 @@
     vars[`nFieldTypes],:tb;
     vars};
 
-.binp.compileSchemaP1P1atomunsigned:{[vars;tname]
+compileSchemaP1P1atomunsigned:{[vars;tname]
     $[tname~"ushort";
         [vars[`nFieldSchema],:0x8007;vars[`nFieldTypes],:`byte$-6];
       tname~"uint";
@@ -70,7 +71,7 @@
     ];
     vars};
 
-.binp.compileSchemaP1P1record:{[vars;tname]
+compileSchemaP1P1record:{[vars;tname]
     recName:`$vars[`tokens][vars[`ptr]];
     if[not recName in vars[`out][`recName]; '"unknown record: ",string recName];
     recIndex:vars[`out][`recName]?recName;
@@ -80,64 +81,64 @@
     vars[`nFieldTypes],:tb;
     vars};
 
-.binp.compileSchemaP1P1case:{[vars;tname]
+compileSchemaP1P1case:{[vars;tname]
     caseVar:`$vars[`tokens][vars[`ptr]];
-    if[not caseVar in -1_vars[`nFieldNames]; .binp.error[vars;{"invalid field in case: ",x}]];
+    if[not caseVar in -1_vars[`nFieldNames]; error[vars;{"invalid field in case: ",x}]];
     caseVarIndex:vars[`nFieldNames]?caseVar;
     caseVarType:vars[`nFieldTypes][caseVarIndex];
-    if[not caseVarType in `byte$-4 -5 -6 -7 10; .binp.error[vars;{"case variable not byte/short/int/long: ",x}]];
+    if[not caseVarType in `byte$-4 -5 -6 -7 10; error[vars;{"case variable not byte/short/int/long: ",x}]];
     vars[`ptr]+:1;    //process case variable
     caseSchema:`byte$();
     caseCount:0;
     fieldExtType:0x01;
     defaultCase:0;
     while[[
-        if[vars[`ptr]>=count vars[`tokens]; .binp.error[vars;{"case \"end\" not found before end of input"}]];
+        if[vars[`ptr]>=count vars[`tokens]; error[vars;{"case \"end\" not found before end of input"}]];
         not "end"~vars[`tokens][vars[`ptr]]];
         caseLabel:vars[`tokens][vars[`ptr]];
         if[not caseLabel~"default";
             $[caseLabel[0]="\"";
                 [
                     if[(not "\""=last caseLabel) or 6<>count caseLabel;
-                        .binp.error[vars;{"invalid fourCC in case: ",x}]];
+                        error[vars;{"invalid fourCC in case: ",x}]];
                     caseLabelN:0x00 sv reverse`byte$1_-1_caseLabel;
                 ];[
                     caseLabelN:"I"$caseLabel;
-                    if[null caseLabelN; .binp.error[vars;{"invalid case number: ",x}]];
+                    if[null caseLabelN; error[vars;{"invalid case number: ",x}]];
                 ]
             ]
         ];
         vars[`ptr]+:1;    //process case label
 
         caseRec:`$vars[`tokens][vars[`ptr]];
-        if[not caseRec in vars[`out][`recName]; .binp.error[vars;{[caseRec;x]"invalid record in case: ",string caseRec}[caseRec]]];
+        if[not caseRec in vars[`out][`recName]; error[vars;{[caseRec;x]"invalid record in case: ",string caseRec}[caseRec]]];
         vars[`ptr]+:1;    //process case record
         caseRecN:`byte$vars[`out][`recName]?caseRec;
 
         $[caseLabel~"default";
             [
-                if[fieldExtType=0x02; .binp.error[vars;{"more than one default case"}]];
+                if[fieldExtType=0x02; error[vars;{"more than one default case"}]];
                 fieldExtType:0x02;
                 defaultCase:caseRecN;
             ];[
-                caseSchema,:.binp.unLE[caseLabelN],caseRecN;
+                caseSchema,:unLE[caseLabelN],caseRecN;
                 caseCount+:1;
             ]
         ];
     ];
-    if[0=caseCount; .binp.error[vars;{"case field with 0 cases"}]];
+    if[0=caseCount; error[vars;{"case field with 0 cases"}]];
     vars[`nFieldTypes],:0x80;
     vars[`nFieldSchema],:0x80  //type=ext
         ,fieldExtType   //0x01=case, 0x02=case with default
         ,(`byte$caseVarType)
-        ,.binp.unLE[`int$caseVarIndex]
+        ,unLE[`int$caseVarIndex]
         ,$[fieldExtType=0x02;defaultCase;()]
-        ,.binp.unLE[`int$caseCount]
+        ,unLE[`int$caseCount]
         ,caseSchema;
     vars[`ptr]+:1;    //process "end"
     vars};
 
-.binp.compileSchemaP1P1array:{[vars;parsed;tname]
+compileSchemaP1P1array:{[vars;parsed;tname]
     if[not parsed;
         ename:vars[`tokens][vars[`ptr]];
         vars[`ptr]+:1; //process element type name
@@ -210,49 +211,49 @@
         [vars[`nFieldSchema],:0x05;
             0i];
       {'"unknown length specifier: ",x}[szt]];
-    vars[`nFieldSchema],:.binp.unLE `int$len;
-    if[parsed; vars:.binp.compileSchemaFieldType[vars]];
+    vars[`nFieldSchema],:unLE `int$len;
+    if[parsed; vars:compileSchemaFieldType[vars]];
     vars};
 
-.binp.operators:enlist[""]!enlist(::);
-.binp.operators["recSize"]:{x[`nFieldSchema],:0x7f01;x};
+operators:enlist[""]!enlist(::);
+operators["recSize"]:{x[`nFieldSchema],:0x7f01;x};
 
-.binp.compileSchemaFieldType:{[vars]
+compileSchemaFieldType:{[vars]
     tname:vars[`tokens][vars[`ptr]];
     vars[`ptr]+:1; //process type name
-    while[tname in key .binp.operators;
-        vars:.binp.operators[tname][vars];
+    while[tname in key operators;
+        vars:operators[tname][vars];
         tname:vars[`tokens][vars[`ptr]];
         vars[`ptr]+:1; //process type name
     ];
     $[tname in ("char";"byte";"short";"int";"long";"real";"float");
-        vars:.binp.compileSchemaP1P1atom[vars;tname];
+        vars:compileSchemaP1P1atom[vars;tname];
       tname in ("ushort";"uint");
-        vars:.binp.compileSchemaP1P1atomunsigned[vars;tname];
+        vars:compileSchemaP1P1atomunsigned[vars;tname];
       tname~"dotnetVarLengthInt";
-        vars:.binp.compileSchemaP1P1atomEx[vars;tname];
+        vars:compileSchemaP1P1atomEx[vars;tname];
       tname~"be";
-        vars:.binp.compileSchemaP1P1atomBE[vars];
+        vars:compileSchemaP1P1atomBE[vars];
       tname~"record";
-        vars:.binp.compileSchemaP1P1record[vars;tname];
+        vars:compileSchemaP1P1record[vars;tname];
       tname~"case";
-        vars:.binp.compileSchemaP1P1case[vars;tname];
+        vars:compileSchemaP1P1case[vars;tname];
       tname~"array";
-        vars:.binp.compileSchemaP1P1array[vars;0b;tname];
+        vars:compileSchemaP1P1array[vars;0b;tname];
       tname~"parsedArray";
-        vars:.binp.compileSchemaP1P1array[vars;1b;tname];
+        vars:compileSchemaP1P1array[vars;1b;tname];
     {'"unknown type in field: ",x}[tname]];
     vars};
 
-.binp.compileSchemaP1P1:{[vars]
+compileSchemaP1P1:{[vars]
     vars[`ptr]+:1; //process "field"
     fname:`$vars[`tokens][vars[`ptr]];
     vars[`ptr]+:1; //process field name
     vars[`nFieldNames],:fname;
-    vars:.binp.compileSchemaFieldType[vars];
+    vars:compileSchemaFieldType[vars];
     vars};
 
-.binp.compileSchemaP1:{[vars]
+compileSchemaP1:{[vars]
     if[not vars[`tokens][vars[`ptr]]~"record"; '"expected \"record\", found ",.Q.s1 vars[`tokens][vars[`ptr]]];
     vars[`ptr]+:1;
     nRecName:`$vars[`tokens][vars[`ptr]];
@@ -262,7 +263,7 @@
     vars[`ptr]+:1; //process rec name
     while[not (vars[`tokens][vars[`ptr]])~"end";  //'branch
         if[not (vars[`tokens][vars[`ptr]])~"field"; '"expected \"field\", found ",.Q.s1 vars[`tokens][vars[`ptr]]];
-        vars:.binp.compileSchemaP1P1[vars];
+        vars:compileSchemaP1P1[vars];
     ];
     if[not vars[`tokens][vars[`ptr]]~"end"; '"expected \"end\", found ",.Q.s1 vars[`tokens][vars[`ptr]]];
     vars[`ptr]+:1;  //process "end"
@@ -275,8 +276,8 @@
     ];
     vars};
 
-.binp.getTokens:{[file;schema]
-    tokens0:.binp.tokenize schema;
+getTokens:{[file;schema]
+    tokens0:tokenize schema;
     tokenStarts:0,-1_sums count each tokens0;
     lineStarts:0,1+schema ss "\n";
     tokenLines:lineStarts bin tokenStarts;
@@ -286,7 +287,7 @@
     tokenPos:enlist[file],/:tokenPos0 keepTokens;
     (tokens;tokenPos)};
 
-.binp.compileSchema:{[schema]
+compileSchema:{[schema]
     if[-11h=type schema;
         schema:enlist schema;
     ];
@@ -294,15 +295,17 @@
         (`$1_/:string schema)!{"\n"sv read0 x} each schema;
         enlist[`]!enlist schema
     ];
-    tokenres:raze flip .binp.getTokens'[key schema;value schema];
+    tokenres:raze flip getTokens'[key schema;value schema];
     ptr:0;
     out:([]recName:`$(); fieldName:(); fieldSchema:());
     tokens:tokenres 0;
     vars:`tokens`tokenPos`ptr`out!(tokens;tokenres 1;ptr;out);
     while[ptr<count tokens; //'branch
-        vars:.binp.compileSchemaP1[vars];
+        vars:compileSchemaP1[vars];
         ptr:vars`ptr;
     ];
     out:vars`out;
     if[count bad:exec recName from out where (::)~/:fieldName; '"record not found: ",", "sv string bad];
     value flip out};
+
+export:([.z.m.parse;lib.parseRepeat;lib.unparse;compileSchema]);

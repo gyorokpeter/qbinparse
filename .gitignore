@@ -8,4 +8,6 @@ q64.def
 config.cmd
 shell.cmd
 r32.cmd
+ru32.cmd
 r64.cmd
+ru64.cmd

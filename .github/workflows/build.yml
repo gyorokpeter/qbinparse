@@ -41,7 +41,7 @@ jobs:
         echo All tests done
     - name: Zip files
       run: |
-        Compress-Archive -Path qbinparse.q, qbinparse_w64.dll -DestinationPath qbinparse_w64.zip
+        Compress-Archive -Path qbinparse.q, qbinparse_c.wi64.dll -DestinationPath qbinparse_w64.zip
       shell: pwsh
     - name: Upload release
       if: github.event_name == 'release'

@@ -1,9 +1,6 @@
 \c 100000 100000
 
-{
-    path:"/"sv -1_"/"vs ssr[;"\\";"/"]first -3#value .z.s;
-    system"l ",path,"/../qbinparse.q";
-    }[];
+.binp:use`..qbinparse;
 
 simpleRecord:.binp.compileSchema"
     record point

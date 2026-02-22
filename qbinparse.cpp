@@ -1393,4 +1393,15 @@ K k_binparse_unparse(K schema, K input, K mainType) {
     return kerror("main type not found in schema");
 }
 
+K kexport(K x) {
+    K names = ktn(KS,3);
+    kS(names)[0] = ssym("parse");
+    kS(names)[1] = ssym("parseRepeat");
+    kS(names)[2] = ssym("unparse");
+    K fns = ktn(0,3);
+    kK(fns)[0] = dl((void*)k_binparse_parse, 3);
+    kK(fns)[1] = dl((void*)k_binparse_parseRepeat, 3);
+    kK(fns)[2] = dl((void*)k_binparse_unparse, 3);
+    return xD(names, fns);
+}
 }
