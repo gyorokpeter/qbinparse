@@ -1,12 +1,6 @@
 debug:0b;
 
-lib:$[.z.o like "w*";  //hack until fixed in core
-    {
-        path:"/"sv -1_"/"vs ssr[;"\\";"/"]first -3#value .z.s;
-        .Q.m.SP,:enlist path;
-        use`qbinparse_c
-    }[];
-    use`..qbinparse_c];
+lib:use`..qbinparse_c;
 
 .z.m.parse:{[schema;data;mainType]
     if[debug; `:::lastExample set (schema;data;mainType)];
